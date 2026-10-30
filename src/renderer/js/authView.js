@@ -42,6 +42,8 @@
         if (cleanCode(codeInput.value).length >= 6) lookupTimer = setTimeout(() => this.lookupExam(true), 250);
       });
 
+      this.initServerPicker();
+
       $('btn-request-otp')?.addEventListener('click', () => this.join());
       ['input-exam-code', 'input-student-name', 'input-student-id'].forEach(id => {
         $(id)?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.join(); });
@@ -55,6 +57,76 @@
       this.bindOtpInputs();
 
       $('btn-capture-face')?.addEventListener('click', () => this.captureFace());
+    },
+
+    // ── Which computer hosts the exam (desktop app only) ──
+
+    initServerPicker() {
+      const $ = (id) => document.getElementById(id);
+      if (!window.proctorAPI || !window.proctorAPI.setServerUrl) return;
+      $('server-picker').classList.remove('hidden');
+      this.renderServer();
+      $('btn-server-change').addEventListener('click', () => {
+        $('server-edit').classList.toggle('hidden');
+        $('input-server').focus();
+      });
+      $('btn-server-connect').addEventListener('click', () => this.connectServer($('input-server').value));
+      $('input-server').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.connectServer(e.target.value); });
+      $('btn-server-local').addEventListener('click', async () => {
+        try { localStorage.removeItem('trinetra.serverUrl'); } catch (_) {}
+        await this.useServer(window.AppState.localServerUrl);
+        $('server-edit').classList.add('hidden');
+      });
+    },
+
+    renderServer() {
+      const state = window.AppState;
+      const local = !state.localServerUrl || state.baseUrl === state.localServerUrl;
+      document.getElementById('server-current').textContent = local ? 'this computer' : state.baseUrl.replace(/^https?:\/\//, '');
+    },
+
+    /** Accepts "192.168.1.20", "192.168.1.20:4100" or a full URL; default port 4100. */
+    normalizeServer(input) {
+      let text = String(input || '').trim();
+      if (!text) return null;
+      if (!/^https?:\/\//i.test(text)) text = `http://${text}`;
+      const u = new URL(text);
+      if (!u.port && u.protocol === 'http:') u.port = '4100';
+      return u.origin;
+    },
+
+    async connectServer(input) {
+      const hint = document.getElementById('server-hint');
+      let url;
+      try { url = this.normalizeServer(input); } catch (_) { url = null; }
+      if (!url) {
+        hint.textContent = 'Enter an address like 192.168.1.20';
+        return;
+      }
+      hint.textContent = `Connecting to ${url}…`;
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5000);
+        const res = await fetch(`${url}/api/health`, { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error();
+      } catch (_) {
+        hint.textContent = `Couldn't reach ${url}. Check the address, that you're on the same Wi-Fi, and that the proctor's firewall allows Trinetra.`;
+        return;
+      }
+      try { localStorage.setItem('trinetra.serverUrl', url); } catch (_) {}
+      await this.useServer(url);
+      document.getElementById('server-edit').classList.add('hidden');
+      hint.textContent = 'Connected. Enter the exam code from your proctor.';
+    },
+
+    async useServer(url) {
+      if (!url) return;
+      window.AppState.baseUrl = url;
+      try { await window.proctorAPI.setServerUrl(url); } catch (_) {}
+      this.renderServer();
+      this.exam = null;
+      document.getElementById('selected-exam-meta')?.classList.add('hidden');
     },
 
     bindOtpInputs() {

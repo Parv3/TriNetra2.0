@@ -20,14 +20,56 @@
     proctorWs: null,
     activeExamId: 'ALL',
     exams: [],
+    proctorToken: (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('trinetra_proctor_token') : '') || '',
 
-    init() {
+    async ensureAuthenticated() {
+      if (this.proctorToken) return this.proctorToken;
+      try {
+        const res = await fetch(`${this.baseUrl}/api/auth/proctor/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'admin', password: 'trinetra2026' })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          this.proctorToken = data.token;
+          try { sessionStorage.setItem('trinetra_proctor_token', data.token); } catch (_) {}
+          return this.proctorToken;
+        }
+      } catch (_) {}
+      return null;
+    },
+
+    async authFetch(url, options = {}) {
+      if (!this.proctorToken) {
+        await this.ensureAuthenticated();
+      }
+      const headers = Object.assign({}, options.headers);
+      if (this.proctorToken) {
+        headers['Authorization'] = `Bearer ${this.proctorToken}`;
+      }
+      let res = await fetch(url, { ...options, headers });
+      if (res.status === 401) {
+        // Token might have expired or been invalidated; re-authenticate and retry once
+        this.proctorToken = '';
+        try { sessionStorage.removeItem('trinetra_proctor_token'); } catch (_) {}
+        const token = await this.ensureAuthenticated();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          res = await fetch(url, { ...options, headers });
+        }
+      }
+      return res;
+    },
+
+    async init() {
       // Determine backend URL from window location if running in browser
       if (window.location && window.location.origin && window.location.origin.startsWith('http')) {
         this.baseUrl = window.location.origin;
       }
       document.getElementById('server-url-display').textContent = this.baseUrl.replace(/^https?:\/\//, '');
 
+      await this.ensureAuthenticated();
       this.bindEvents();
       this.startClock();
       this.fetchNetworkInfo();
@@ -79,7 +121,7 @@
 
     async fetchExamsList() {
       try {
-        const res = await fetch(`${this.baseUrl}/api/assessment/exams`);
+        const res = await this.authFetch(`${this.baseUrl}/api/assessment/exams`);
         if (!res.ok) return;
         const exams = await res.json();
         this.exams = Array.isArray(exams) ? exams : [];
@@ -143,7 +185,7 @@
         return;
       }
       if (action === 'toggle') {
-        await fetch(`${this.baseUrl}/api/assessment/exams/${btn.dataset.id}/status`, {
+        await this.authFetch(`${this.baseUrl}/api/assessment/exams/${btn.dataset.id}/status`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: btn.dataset.status })
         });
         this.fetchExamsList();
@@ -160,9 +202,13 @@
       this.refreshAll(true);
     },
 
-    connectWebSocket() {
+    async connectWebSocket() {
       try {
-        const wsUrl = this.baseUrl.replace(/^http/, 'ws') + '/ws/proctor?role=proctor';
+        if (!this.proctorToken) {
+          await this.ensureAuthenticated();
+        }
+        const tokenParam = this.proctorToken ? `&token=${encodeURIComponent(this.proctorToken)}` : '';
+        const wsUrl = this.baseUrl.replace(/^http/, 'ws') + '/ws/proctor?role=proctor' + tokenParam;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
@@ -463,7 +509,8 @@
       // HTML Export button
       document.getElementById('btn-export-html-report')?.addEventListener('click', () => {
         if (!this.activeSessionId) return;
-        window.open(`${this.baseUrl}/api/audit/session/${this.activeSessionId}/export?format=html`, '_blank');
+        const tokenParam = this.proctorToken ? `&token=${encodeURIComponent(this.proctorToken)}` : '';
+        window.open(`${this.baseUrl}/api/audit/session/${this.activeSessionId}/export?format=html${tokenParam}`, '_blank');
       });
 
       // Disqualify button in drawer
@@ -518,7 +565,7 @@
 
     async fetchOverview() {
       try {
-        const res = await fetch(`${this.baseUrl}/api/audit/overview`);
+        const res = await this.authFetch(`${this.baseUrl}/api/audit/overview`);
         if (!res.ok) return;
         const data = await res.json();
 
@@ -545,7 +592,7 @@
         if (this.currentFilters.search) params.append('search', this.currentFilters.search);
         if (this.activeExamId && this.activeExamId !== 'ALL') params.append('examId', this.activeExamId);
 
-        const res = await fetch(`${this.baseUrl}/api/audit/sessions?${params.toString()}`);
+        const res = await this.authFetch(`${this.baseUrl}/api/audit/sessions?${params.toString()}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const sessions = await res.json();
         this.allSessions = sessions;
@@ -877,7 +924,7 @@
 
       // Fetch comprehensive audit report from backend
       try {
-        const res = await fetch(`${this.baseUrl}/api/audit/session/${sessionId}/report`);
+        const res = await this.authFetch(`${this.baseUrl}/api/audit/session/${sessionId}/report`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const report = await res.json();
         this.renderDrawerDetails(report);
@@ -1057,7 +1104,7 @@
       const status = document.getElementById('resume-status');
       btn.disabled = true;
       try {
-        const res = await fetch(`${this.baseUrl}/api/audit/session/${sessionId}/action`, {
+        const res = await this.authFetch(`${this.baseUrl}/api/audit/session/${sessionId}/action`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1230,7 +1277,7 @@
       btn.disabled = true;
       btn.textContent = 'Creating…';
       try {
-        const res = await fetch(`${this.baseUrl}/api/assessment/exams`, {
+        const res = await this.authFetch(`${this.baseUrl}/api/assessment/exams`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         });
         const created = await res.json();
@@ -1328,7 +1375,7 @@
       if (modal) modal.classList.remove('hidden');
 
       try {
-        const res = await fetch(`${this.baseUrl}/api/assessment/exams/${this.activeExamId}`);
+        const res = await this.authFetch(`${this.baseUrl}/api/assessment/exams/${this.activeExamId}`);
         if (!res.ok) return;
         const exam = await res.json();
         const rules = exam.rules || {};
@@ -1365,7 +1412,7 @@
       };
 
       try {
-        const res = await fetch(`${this.baseUrl}/api/assessment/exams/${this.activeExamId}/rules`, {
+        const res = await this.authFetch(`${this.baseUrl}/api/assessment/exams/${this.activeExamId}/rules`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(rules)
@@ -1405,7 +1452,7 @@
 
       // 2. Persist warning in backend
       try {
-        await fetch(`${this.baseUrl}/api/audit/session/${sessionId}/action`, {
+        await this.authFetch(`${this.baseUrl}/api/audit/session/${sessionId}/action`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'WARN', message })
@@ -1432,7 +1479,7 @@
 
       // 2. Call backend REST action
       try {
-        const res = await fetch(`${this.baseUrl}/api/audit/session/${sessionId}/action`, {
+        const res = await this.authFetch(`${this.baseUrl}/api/audit/session/${sessionId}/action`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'DISQUALIFY', reason })

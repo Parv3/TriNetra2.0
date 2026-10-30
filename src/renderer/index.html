@@ -135,6 +135,20 @@
               <h1 class="page-title">Join your exam</h1>
               <p class="lede">Enter the exam code your proctor gave you, with your name and roll number.</p>
 
+              <div id="server-picker" class="server-picker hidden">
+                <div class="server-row">
+                  <span class="field-label">Exam hosted on</span>
+                  <span id="server-current" class="mono">this computer</span>
+                  <button type="button" id="btn-server-change" class="link-btn">Change</button>
+                </div>
+                <div id="server-edit" class="server-edit hidden">
+                  <input id="input-server" class="input input-mono" type="text" placeholder="Proctor's address, e.g. 192.168.1.20" autocomplete="off" spellcheck="false">
+                  <button type="button" id="btn-server-connect" class="btn btn-secondary btn-sm">Connect</button>
+                  <button type="button" id="btn-server-local" class="btn btn-quiet btn-sm">Use this computer</button>
+                </div>
+                <p id="server-hint" class="field-hint">Taking an exam run on someone else's laptop? Ask the proctor for their address and enter it here.</p>
+              </div>
+
               <div class="field">
                 <label class="field-label" for="input-exam-code">Exam code</label>
                 <input id="input-exam-code" class="input input-code" type="text" placeholder="XXX-XXX" maxlength="9" autocomplete="off" spellcheck="false">

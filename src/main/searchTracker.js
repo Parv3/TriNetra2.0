@@ -49,6 +49,14 @@ class SearchTracker {
     this.backendPort = port;
   }
 
+  /** Points search-event reporting at another exam server (e.g. the proctor's laptop). */
+  setBackendUrl(backendUrl) {
+    const u = new URL(backendUrl);
+    this.host = u.hostname;
+    this.transport = u.protocol === 'https:' ? require('node:https') : http;
+    this.backendPort = Number(u.port) || (u.protocol === 'https:' ? 443 : 80);
+  }
+
   /**
    * Pure function to extract search query or AI prompt from an arbitrary URL.
    * Returns: { service: string, query: string, url: string, isFlaggedAiTool: boolean } | null

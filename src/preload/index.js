@@ -48,6 +48,11 @@ function createProctorAPI(ipc = ipcRenderer) {
       return ipc.invoke('system:get-server-url');
     },
 
+    setServerUrl: async (url) => {
+      assertString(url, 'url');
+      return ipc.invoke('system:set-server-url', url);
+    },
+
     getAppVersion: async () => {
       return ipc.invoke('system:get-app-version');
     },

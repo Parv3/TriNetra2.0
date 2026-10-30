@@ -3,9 +3,10 @@ const router = express.Router();
 const proctorService = require('../services/proctorService');
 const websocketService = require('../services/websocketService');
 const datastore = require('../db/datastore');
+const { requireProctor } = require('../middleware/authMiddleware');
 
-// GET /api/audit/overview — High-level KPI metrics across all candidates
-router.get('/overview', async (req, res, next) => {
+// GET /api/audit/overview — High-level KPI metrics across all candidates (Proctor only)
+router.get('/overview', requireProctor, async (req, res, next) => {
   try {
     const stats = await proctorService.getOverviewStats();
     return res.status(200).json(stats);
@@ -14,8 +15,8 @@ router.get('/overview', async (req, res, next) => {
   }
 });
 
-// GET /api/audit/sessions — List and filter all candidate sessions
-router.get('/sessions', async (req, res, next) => {
+// GET /api/audit/sessions — List and filter all candidate sessions (Proctor only)
+router.get('/sessions', requireProctor, async (req, res, next) => {
   try {
     const sessions = await proctorService.getAllSessionsSummary(req.query);
     return res.status(200).json(sessions);
@@ -24,8 +25,8 @@ router.get('/sessions', async (req, res, next) => {
   }
 });
 
-// POST /api/audit/session/:id/action — Proctor intervention (Disqualify / Warn)
-router.post('/session/:id/action', async (req, res, next) => {
+// POST /api/audit/session/:id/action — Proctor intervention (Disqualify / Warn) (Proctor only)
+router.post('/session/:id/action', requireProctor, async (req, res, next) => {
   try {
     const result = await proctorService.performSessionAction(
       req.params.id,

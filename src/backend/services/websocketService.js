@@ -6,6 +6,8 @@
 
 const { WebSocketServer } = require('ws');
 const crypto = require('crypto');
+const authService = require('./authService');
+const config = require('../config');
 
 // A proctor connection that is this far behind gets no thumbnails until it catches up;
 // queueing stale frames is what makes a feed fall further and further behind.
@@ -31,9 +33,42 @@ class WebSocketService {
 
     this.wss.on('connection', (ws, req) => {
       try {
-        const params = new URL(req.url, 'http://localhost').searchParams;
-        const role = params.get('role') || 'student';
+        const parsedUrl = new URL(req.url, 'http://localhost');
+        const params = parsedUrl.searchParams;
+        const requestedRole = params.get('role') || 'student';
         const sessionId = params.get('sessionId') || null;
+
+        // Extract token from query param, sec-websocket-protocol, or authorization header
+        const token = params.get('token') ||
+                      (req.headers['authorization'] ? req.headers['authorization'].replace(/^Bearer\s+/i, '') : null) ||
+                      (req.headers['sec-websocket-protocol'] ? req.headers['sec-websocket-protocol'].split(',')[0].trim() : null);
+
+        let session = null;
+        if (token) {
+          session = authService.validateSessionToken(token);
+        }
+
+        // Determine authenticated role
+        let role = 'student';
+        if (session && session.role === 'proctor') {
+          role = 'proctor';
+        } else if (requestedRole === 'proctor') {
+          // Reject unauthenticated proctor connections if auth is enforced
+          if (config.ENFORCE_AUTH) {
+            ws.close(4401, 'Unauthorized: Valid proctor JWT token required');
+            return;
+          }
+          // Legacy/dev fallback for local automated test suites
+          role = 'proctor';
+        }
+
+        // Student validation: in production, verify token matches session
+        if (role === 'student' && config.ENFORCE_AUTH) {
+          if (!session) {
+            ws.close(4401, 'Unauthorized: Valid student session token required');
+            return;
+          }
+        }
 
         if (role === 'proctor') {
           ws.watcherId = 'w_' + crypto.randomUUID().slice(0, 12);

@@ -182,6 +182,43 @@ router.post('/face/verify', (req, res, next) => {
   }
 });
 
+// POST /api/auth/proctor/login
+router.post('/proctor/login', (req, res, next) => {
+  try {
+    const { username, password } = req.body || {};
+    const result = authService.loginProctor(username, password);
+    return res.status(200).json(result);
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({
+        error: true,
+        statusCode: err.status,
+        code: err.error,
+        message: err.message
+      });
+    }
+    next(err);
+  }
+});
+
+// GET /api/auth/me
+router.get('/me', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ authenticated: false, message: 'No bearer token provided' });
+  }
+  const token = authHeader.slice(7).trim();
+  const session = authService.validateSessionToken(token);
+  if (!session) {
+    return res.status(401).json({ authenticated: false, message: 'Invalid or expired token' });
+  }
+  return res.status(200).json({
+    authenticated: true,
+    role: session.role || (session.isProctor ? 'proctor' : 'candidate'),
+    user: session
+  });
+});
+
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
   const authHeader = req.headers['authorization'];

@@ -7,12 +7,85 @@ class AuthService {
     this.datastore = ds;
     this.otpStore = new Map();
     this.tokenStore = new Map();
+    this.revokedTokens = new Set();
     this.OTP_TTL_MS = 5 * 60 * 1000;
     this.TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
   }
 
   setDataStore(ds) {
     this.datastore = ds;
+  }
+
+  signToken(payload) {
+    const header = { alg: 'HS256', typ: 'JWT' };
+    const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+    const enrichedPayload = {
+      ...payload,
+      iat: Math.floor(Date.now() / 1000),
+      exp: payload.exp || Math.floor((Date.now() + this.TOKEN_TTL_MS) / 1000)
+    };
+    const encodedPayload = Buffer.from(JSON.stringify(enrichedPayload)).toString('base64url');
+    const signature = crypto
+      .createHmac('sha256', config.JWT_SECRET)
+      .update(`${encodedHeader}.${encodedPayload}`)
+      .digest('base64url');
+    return `${encodedHeader}.${encodedPayload}.${signature}`;
+  }
+
+  verifyToken(token) {
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return null;
+    }
+    const [encodedHeader, encodedPayload, signature] = parts;
+    const expectedSignature = crypto
+      .createHmac('sha256', config.JWT_SECRET)
+      .update(`${encodedHeader}.${encodedPayload}`)
+      .digest('base64url');
+
+    try {
+      const sigBuf = Buffer.from(signature);
+      const expectedBuf = Buffer.from(expectedSignature);
+      if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+        return null;
+      }
+      const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+      if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) {
+        return null;
+      }
+      return payload;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  loginProctor(username, password) {
+    if (!username || !password) {
+      const err = new Error('Username and password are required');
+      err.status = 400;
+      err.error = 'MISSING_CREDENTIALS';
+      throw err;
+    }
+    if (username !== config.PROCTOR_USERNAME || password !== config.PROCTOR_PASSWORD) {
+      const err = new Error('Invalid proctor credentials');
+      err.status = 401;
+      err.error = 'INVALID_CREDENTIALS';
+      throw err;
+    }
+    const token = this.signToken({
+      sub: username,
+      role: 'proctor',
+      username,
+      name: 'Authorized Proctor'
+    });
+    return {
+      success: true,
+      token,
+      role: 'proctor',
+      username,
+      name: 'Authorized Proctor'
+    };
   }
 
   resolveCandidate(identifier) {
@@ -61,81 +134,99 @@ class AuthService {
     if (this.datastore && typeof this.datastore.addCandidate === 'function') {
       this.datastore.addCandidate(candidate);
     }
+
     return candidate;
   }
 
   requestOtp(identifier) {
-    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
-      const err = new Error('studentId is required and must be a non-empty string');
+    if (!identifier) {
+      const err = new Error('identifier is required');
       err.status = 400;
       err.error = 'MISSING_IDENTIFIER';
       throw err;
     }
 
-    if (/[<>{}]/.test(identifier)) {
-      const err = new Error('studentId contains disallowed special characters');
+    const cleanId = String(identifier).trim();
+    if (/[<>{}]/.test(cleanId)) {
+      const err = new Error('identifier contains disallowed characters');
       err.status = 400;
       err.error = 'INVALID_IDENTIFIER';
       throw err;
     }
 
-    const candidate = this.resolveCandidate(identifier);
+    const candidate = this.resolveCandidate(cleanId);
     if (!candidate) {
-      const err = new Error('No candidate record found for provided identifier.');
+      const err = new Error('Candidate identifier not found in database');
       err.status = 404;
       err.error = 'STUDENT_NOT_FOUND';
       throw err;
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographic 6-digit OTP
+    const num = crypto.randomInt(100000, 999999);
+    const otp = String(num);
     const expiresAt = Date.now() + this.OTP_TTL_MS;
 
-    const otpPayload = {
+    const payload = {
       otp,
+      studentId: candidate.id,
       expiresAt,
-      candidateId: candidate.id
+      attempts: 0
     };
 
-    this.otpStore.set(candidate.id.toLowerCase(), otpPayload);
-    this.otpStore.set(candidate.id, otpPayload);
-    this.otpStore.set(candidate.email.toLowerCase(), otpPayload);
-    this.otpStore.set(identifier.trim(), otpPayload);
-    this.otpStore.set(identifier.trim().toLowerCase(), otpPayload);
+    this.otpStore.set(candidate.id, payload);
+    if (candidate.email) {
+      this.otpStore.set(candidate.email.toLowerCase(), payload);
+    }
 
     if (this.datastore && typeof this.datastore.setOtp === 'function') {
-      this.datastore.setOtp(candidate.id, otpPayload);
-      this.datastore.setOtp(candidate.email, otpPayload);
+      this.datastore.setOtp(candidate.id, payload);
+      if (candidate.email) {
+        this.datastore.setOtp(candidate.email.toLowerCase(), payload);
+      }
     }
+
+    const isMasterAllowed = Boolean(
+      process.env.NODE_ENV === 'test' ||
+      config.ENV === 'test' ||
+      config.ALLOW_MASTER_OTP === true ||
+      process.env.DEMO_MODE === 'true' ||
+      process.env.ALLOW_MASTER_OTP === 'true' ||
+      (config.ENV === 'development' && process.env.NODE_ENV !== 'production')
+    );
 
     return {
       success: true,
-      message: 'OTP generated successfully',
-      studentId: candidate.id,
-      email: candidate.email,
-      otp,
-      devOtp: otp,
-      expiresInSeconds: Math.floor(this.OTP_TTL_MS / 1000)
+      expiresIn: Math.floor(this.OTP_TTL_MS / 1000),
+      message: 'OTP dispatched successfully',
+      otp: isMasterAllowed ? otp : undefined,
+      devOtp: isMasterAllowed ? otp : undefined,
+      debugOtp: isMasterAllowed ? otp : undefined,
+      maskedDestination: candidate.email
+        ? candidate.email.replace(/^(.{2})(.*)(@.*)$/, (_, a, b, c) => a + '*'.repeat(Math.max(1, b.length)) + c)
+        : 'phone ending in ***'
     };
   }
 
-  verifyOtp(identifier, submittedOtp) {
-    if (!identifier || submittedOtp === undefined || submittedOtp === null) {
-      const err = new Error('Both studentId (or email) and otp are required.');
+  verifyOtp(identifier, otp) {
+    if (!identifier || !otp) {
+      const err = new Error('studentId and otp are required');
       err.status = 400;
       err.error = 'MISSING_CREDENTIALS';
       throw err;
     }
 
-    const cleanOtp = String(submittedOtp).trim();
     const cleanId = String(identifier).trim();
+    const cleanOtp = String(otp).trim();
     const key = cleanId.toLowerCase();
 
-    const stored = this.otpStore.get(cleanId) ||
-      this.otpStore.get(key) ||
-      (this.datastore && typeof this.datastore.getOtp === 'function' && (this.datastore.getOtp(cleanId) || this.datastore.getOtp(key)));
+    let stored = this.otpStore.get(cleanId) || this.otpStore.get(key);
+    if (!stored && this.datastore && typeof this.datastore.getOtp === 'function') {
+      stored = this.datastore.getOtp(cleanId) || this.datastore.getOtp(key);
+    }
 
     if (!stored) {
-      const err = new Error('No OTP requested for this student ID');
+      const err = new Error('No active OTP found. Please request a new OTP');
       err.status = 401;
       err.error = 'NO_OTP_REQUESTED';
       throw err;
@@ -182,11 +273,23 @@ class AuthService {
       faceRegistered: false
     };
 
-    const token = 'sess_tok_' + crypto.randomUUID();
+    const token = this.signToken({
+      sub: candidate.id,
+      candidateId: candidate.id,
+      role: 'candidate',
+      candidate: {
+        id: candidate.id,
+        name: candidate.name,
+        email: candidate.email,
+        rollNo: candidate.rollNo,
+        faceRegistered: Boolean(candidate.faceRegistered)
+      }
+    });
     const expiresAt = Date.now() + this.TOKEN_TTL_MS;
 
     const sessionData = {
       candidateId: candidate.id,
+      role: 'candidate',
       candidate: {
         id: candidate.id,
         name: candidate.name,
@@ -208,6 +311,7 @@ class AuthService {
         token,
         studentId: candidate.id,
         candidateId: candidate.id,
+        role: 'candidate',
         authenticatedAt: Date.now(),
         authMethod: 'OTP',
         expiresAt
@@ -217,7 +321,56 @@ class AuthService {
 
   validateSessionToken(token) {
     if (!token) return null;
+    if (this.revokedTokens && this.revokedTokens.has(token)) return null;
+
+    // Check in-memory store for session & explicit expiration override
     const session = this.tokenStore.get(token);
+
+    // 1. Try cryptographic JWT verification
+    const jwtPayload = this.verifyToken(token);
+    if (jwtPayload) {
+      if (jwtPayload.role === 'proctor') {
+        return {
+          role: 'proctor',
+          username: jwtPayload.username || jwtPayload.sub,
+          name: jwtPayload.name || 'Authorized Proctor',
+          isProctor: true
+        };
+      }
+
+      // Candidate sessions are registered in tokenStore; if removed, token is revoked
+      if (!session) {
+        return null;
+      }
+
+      if (Date.now() > session.expiresAt) {
+        this.tokenStore.delete(token);
+        return null;
+      }
+
+      const candidateId = jwtPayload.candidateId || session.candidateId || jwtPayload.sub;
+      let candidate = session.candidate || jwtPayload.candidate || { id: candidateId, name: candidateId };
+      if (this.datastore && typeof this.datastore.getCandidateById === 'function') {
+        const fresh = this.datastore.getCandidateById(candidateId);
+        if (fresh) {
+          candidate = {
+            id: fresh.id,
+            name: fresh.name,
+            email: fresh.email,
+            rollNo: fresh.rollNo,
+            faceRegistered: Boolean(fresh.faceRegistered)
+          };
+        }
+      }
+      return {
+        role: 'candidate',
+        candidateId,
+        candidate,
+        expiresAt: session.expiresAt
+      };
+    }
+
+    // 2. Fallback to in-memory store for legacy session tokens
     if (!session) return null;
 
     if (Date.now() > session.expiresAt) {
@@ -238,7 +391,7 @@ class AuthService {
       }
     }
 
-    return session;
+    return { role: session.role || 'candidate', ...session };
   }
 
   registerFaceBaseline(candidateId, payload = {}) {
@@ -312,6 +465,9 @@ class AuthService {
   logout(token) {
     if (token) {
       this.tokenStore.delete(token);
+      if (this.revokedTokens) {
+        this.revokedTokens.add(token);
+      }
     }
     return { success: true, message: 'Logged out successfully.' };
   }

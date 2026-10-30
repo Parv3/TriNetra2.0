@@ -27,6 +27,12 @@ module.exports = {
   TOKEN_EXPIRY_HOURS: 24,
   BODY_SIZE_LIMIT: '10mb', // Supports base64 webcam baseline photos
 
+  // Security & Authentication Configuration
+  JWT_SECRET: process.env.JWT_SECRET || 'trinetra-dev-secret-key-change-in-production-2026',
+  PROCTOR_USERNAME: process.env.PROCTOR_USERNAME || 'admin',
+  PROCTOR_PASSWORD: process.env.PROCTOR_PASSWORD || 'trinetra2026',
+  ENFORCE_AUTH: process.env.ENFORCE_AUTH === 'true' || process.env.NODE_ENV === 'production',
+
   // Persistence file paths & Database
   DATA_DIR: path.resolve(process.env.TRINETRA_DATA_DIR || path.join(process.cwd(), 'data')),
   DATASTORE_FILE: path.resolve(process.env.TRINETRA_DATA_DIR || path.join(process.cwd(), 'data'), 'proctor_store.json'),

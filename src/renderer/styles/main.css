@@ -538,3 +538,14 @@ body.web-mode #tab-strip-area, body.web-mode #omnibox-bar, body.web-mode .titleb
 .lookup-article p { font-size: 14px; color: var(--ink-2); margin-bottom: 10px; line-height: 1.6; }
 .lookup-article-head { display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); padding: 6px 0; }
 .hidden-answer { background: var(--ink); color: var(--ink); border-radius: 3px; padding: 0 6px; font-size: 0.85em; }
+
+/* ── Exam server picker (desktop app) ─────────────────────── */
+.server-picker { margin-bottom: 20px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.server-row { display: flex; align-items: baseline; gap: 10px; }
+.server-row .field-label { margin: 0; color: var(--muted); font-weight: 500; }
+.server-row .mono { font-weight: 600; color: var(--brand-dark); }
+.server-edit { display: flex; gap: 8px; margin-top: 10px; }
+.server-edit .input { height: 36px; }
+.server-picker .field-hint { margin-top: 8px; }
+.link-btn { color: var(--brand); font-weight: 500; }
+.link-btn:hover { text-decoration: underline; }

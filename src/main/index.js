@@ -6,6 +6,14 @@
 const { app } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+
+// An installed app's working directory is unpredictable (often read-only), so keep exams,
+// attempts and certificates in the user's app-data folder. Must run before the backend
+// config is loaded. `npm start` from the repo keeps using ./data.
+if (app.isPackaged && !process.env.TRINETRA_DATA_DIR) {
+  process.env.TRINETRA_DATA_DIR = path.join(app.getPath('userData'), 'data');
+}
+
 const { startServer, stopServer } = require('../backend/server');
 const windowManager = require('./windowManager');
 const { tabManager } = require('./tabManager');

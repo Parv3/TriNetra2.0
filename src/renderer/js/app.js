@@ -308,7 +308,8 @@
     try {
       const wsProtocol = state.baseUrl.startsWith('https') ? 'wss:' : 'ws:';
       const wsHost = state.baseUrl.replace(/^https?:\/\//, '');
-      const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/proctor?role=student&sessionId=${encodeURIComponent(sessionId)}`);
+      const tokenParam = state.token ? `&token=${encodeURIComponent(state.token)}` : '';
+      const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/proctor?role=student&sessionId=${encodeURIComponent(sessionId)}${tokenParam}`);
 
       ws.onmessage = (event) => {
         let msg;
@@ -340,6 +341,19 @@
       if (window.proctorAPI && window.proctorAPI.getServerUrl) {
         // Embedded backend, or the central exam server the desktop app is configured for
         state.baseUrl = (await window.proctorAPI.getServerUrl()) || state.baseUrl;
+        state.localServerUrl = state.baseUrl;
+        // Reconnect to the proctor's computer this app joined last time, if it's still there.
+        let saved = null;
+        try { saved = localStorage.getItem('trinetra.serverUrl'); } catch (_) {}
+        if (saved && saved !== state.baseUrl && window.proctorAPI.setServerUrl) {
+          try {
+            const res = await fetch(`${saved}/api/health`, { signal: AbortSignal.timeout(3000) });
+            if (res.ok) {
+              state.baseUrl = saved;
+              await window.proctorAPI.setServerUrl(saved);
+            }
+          } catch (_) {}
+        }
       } else if (window.proctorAPI && window.proctorAPI.getBackendPort) {
         state.backendPort = await window.proctorAPI.getBackendPort();
         state.baseUrl = `http://127.0.0.1:${state.backendPort}`;

@@ -25,7 +25,7 @@ function isAuthorizedSender(event, mainWindow) {
 }
 
 function registerIpcHandlers({ mainWindow, backendPort, backendUrl, appVersion, tabManager, searchTracker, integrityMonitor, searchPolicy, fetchFn }, ipc = electronIpcMain) {
-  const serverUrl = backendUrl || (backendPort ? `http://127.0.0.1:${backendPort}` : null);
+  let serverUrl = backendUrl || (backendPort ? `http://127.0.0.1:${backendPort}` : null);
   registeredIpcInstance = ipc;
   if (!ipc) return;
 
@@ -41,6 +41,20 @@ function registerIpcHandlers({ mainWindow, backendPort, backendUrl, appVersion, 
   ipc.handle('system:get-backend-port', portHandler);
 
   // Full server URL: the embedded backend, or the central exam server in deployments
+  // A student's app joins the exam hosted on another computer (the proctor's laptop).
+  ipc.handle('system:set-server-url', (event, url) => {
+    if (!isAuthorizedSender(event, mainWindow)) {
+      throw new Error('Unauthorized IPC invocation: set-server-url');
+    }
+    const parsed = new URL(String(url || ''));
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Server address must start with http:// or https://');
+    serverUrl = parsed.origin;
+    if (tabManager && typeof tabManager.setBackendUrl === 'function') tabManager.setBackendUrl(serverUrl);
+    if (searchTracker && typeof searchTracker.setBackendUrl === 'function') searchTracker.setBackendUrl(serverUrl);
+    if (integrityMonitor) integrityMonitor.backendUrl = serverUrl;
+    return serverUrl;
+  });
+
   ipc.handle('system:get-server-url', (event) => {
     if (!isAuthorizedSender(event, mainWindow)) {
       throw new Error('Unauthorized IPC invocation: get-server-url');
@@ -174,6 +188,7 @@ function unregisterIpcHandlers(ipc = registeredIpcInstance || electronIpcMain) {
   const handleChannels = [
     'system:get-backend-port',
     'system:get-server-url',
+    'system:set-server-url',
     'app:get-backend-port',
     'system:get-app-version',
     'app:get-version',

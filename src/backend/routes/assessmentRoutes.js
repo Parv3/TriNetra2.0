@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const assessmentService = require('../services/assessmentService');
 const timerService = require('../services/timerService');
-const { authMiddleware, optionalAuthMiddleware } = require('../middleware/authMiddleware');
+const { authMiddleware, optionalAuthMiddleware, requireProctor } = require('../middleware/authMiddleware');
 
 // GET /api/assessment/questions (Protected per PROJECT.md line 143 and E2E F2.4)
 router.get('/questions', authMiddleware, (req, res, next) => {
@@ -296,7 +296,7 @@ router.get('/exams/:id', (req, res) => {
 });
 
 // POST /api/assessment/exams — proctor creates an exam; the response carries its join code
-router.post('/exams', (req, res) => {
+router.post('/exams', requireProctor, (req, res) => {
   const datastore = require('../db/datastore');
   const body = req.body || {};
 
@@ -340,7 +340,7 @@ router.post('/exams', (req, res) => {
 });
 
 // PATCH /api/assessment/exams/:id/status — open or close an exam for new candidates
-router.patch('/exams/:id/status', (req, res) => {
+router.patch('/exams/:id/status', requireProctor, (req, res) => {
   const datastore = require('../db/datastore');
   const exam = datastore.getExam(req.params.id);
   if (!exam) return res.status(404).json({ error: true, message: `Exam ${req.params.id} not found` });
@@ -352,7 +352,7 @@ router.patch('/exams/:id/status', (req, res) => {
 });
 
 // PATCH /api/assessment/exams/:id/rules
-router.patch('/exams/:id/rules', (req, res) => {
+router.patch('/exams/:id/rules', requireProctor, (req, res) => {
   const datastore = require('../db/datastore');
   const exam = datastore.updateExamRules(req.params.id, req.body);
   if (!exam) {
