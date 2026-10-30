@@ -1,0 +1,197 @@
+[
+  {
+    "category": "Complexity",
+    "text": "What is the time complexity of searching for a value in a balanced binary search tree with n nodes?",
+    "options": [
+      "O(1)",
+      "O(log n)",
+      "O(n)",
+      "O(n log n)"
+    ],
+    "correctIndex": 1,
+    "hint": "Each comparison lets you discard one subtree. Think about how many times n can be halved.",
+    "explanation": "A balanced BST has height about log2(n), and each step moves one level down, so search takes O(log n)."
+  },
+  {
+    "category": "Queues",
+    "text": "Which data structure processes elements in first-in, first-out (FIFO) order?",
+    "options": [
+      "Stack",
+      "Hash table",
+      "Binary heap",
+      "Queue"
+    ],
+    "correctIndex": 3,
+    "hint": "Picture people waiting in line at a ticket counter.",
+    "explanation": "A queue removes elements in the order they were added: first in, first out."
+  },
+  {
+    "category": "Stacks",
+    "text": "Which data structure does a programming language runtime use to keep track of active function calls?",
+    "options": [
+      "Queue",
+      "Linked list",
+      "Stack",
+      "Graph"
+    ],
+    "correctIndex": 2,
+    "hint": "The most recently called function is always the first one to return.",
+    "explanation": "Function calls follow last-in, first-out order, which is exactly how the call stack works."
+  },
+  {
+    "category": "Hashing",
+    "text": "What is the average-case time to look up a key in a hash table with a good hash function and a low load factor?",
+    "options": [
+      "O(1)",
+      "O(log n)",
+      "O(n)",
+      "O(n^2)"
+    ],
+    "correctIndex": 0,
+    "hint": "A good hash function jumps straight to a bucket that holds only a few items.",
+    "explanation": "With uniform hashing and a bounded load factor, each bucket holds a constant number of keys on average, so lookup is O(1)."
+  },
+  {
+    "category": "Hashing",
+    "text": "Two different keys produce the same hash index. What is this called?",
+    "options": [
+      "Overflow",
+      "Collision",
+      "Rehashing",
+      "Probing"
+    ],
+    "correctIndex": 1,
+    "hint": "Two keys are trying to occupy the same slot.",
+    "explanation": "A collision happens when distinct keys map to the same index. Chaining and open addressing are ways to resolve it."
+  },
+  {
+    "category": "Sorting",
+    "text": "Which sorting algorithm has a worst-case time complexity of O(n log n) and is stable?",
+    "options": [
+      "Quick sort",
+      "Heap sort",
+      "Merge sort",
+      "Selection sort"
+    ],
+    "correctIndex": 2,
+    "hint": "Consider both requirements: a guaranteed worst case, and keeping equal elements in their original order.",
+    "explanation": "Merge sort always splits in half and merges in linear time, giving O(n log n) in every case, and a careful merge keeps equal elements in order."
+  },
+  {
+    "category": "Sorting",
+    "text": "What is the worst-case time complexity of quick sort when the pivot is always the smallest element?",
+    "options": [
+      "O(n)",
+      "O(n log n)",
+      "O(n^2)",
+      "O(log n)"
+    ],
+    "correctIndex": 2,
+    "hint": "If the pivot is the smallest element, how big is each partition?",
+    "explanation": "With the smallest element as the pivot, each partition removes only one element, giving n + (n-1) + ... + 1 = O(n^2) comparisons."
+  },
+  {
+    "category": "Linked lists",
+    "text": "In a singly linked list, which operation takes O(1) time if you only have a pointer to the head?",
+    "options": [
+      "Inserting at the end",
+      "Finding the middle node",
+      "Deleting the last node",
+      "Inserting at the beginning"
+    ],
+    "correctIndex": 3,
+    "hint": "Which operation does not require walking through the list?",
+    "explanation": "Inserting at the beginning only requires pointing the new node at the current head and updating the head pointer."
+  },
+  {
+    "category": "Trees",
+    "text": "Which traversal of a binary search tree visits the keys in ascending order?",
+    "options": [
+      "Pre-order",
+      "Level-order",
+      "Post-order",
+      "In-order"
+    ],
+    "correctIndex": 3,
+    "hint": "In a BST, every key in the left subtree is smaller than the node and every key in the right subtree is larger.",
+    "explanation": "In-order traversal visits left subtree, node, right subtree, which outputs BST keys in sorted order."
+  },
+  {
+    "category": "Heaps",
+    "text": "In a binary min-heap, where is the smallest element always stored?",
+    "options": [
+      "At the root",
+      "At the last leaf",
+      "At the leftmost leaf",
+      "Anywhere in the bottom level"
+    ],
+    "correctIndex": 0,
+    "hint": "Recall the heap property between a parent and its children.",
+    "explanation": "Every parent is less than or equal to its children, so the minimum must be at the root."
+  },
+  {
+    "category": "Graphs",
+    "text": "Which algorithm finds the shortest path from one source in a graph with non-negative edge weights?",
+    "options": [
+      "Depth-first search",
+      "Kruskal's algorithm",
+      "Dijkstra's algorithm",
+      "Topological sort"
+    ],
+    "correctIndex": 2,
+    "hint": "The algorithm repeatedly picks the unvisited vertex with the smallest known distance.",
+    "explanation": "Dijkstra's algorithm greedily settles the closest unvisited vertex, which is correct when edge weights are non-negative."
+  },
+  {
+    "category": "Graphs",
+    "text": "Breadth-first search on an unweighted graph is typically implemented with which data structure?",
+    "options": [
+      "Queue",
+      "Stack",
+      "Priority queue",
+      "Hash set only"
+    ],
+    "correctIndex": 0,
+    "hint": "BFS explores all neighbours at the current distance before moving further out.",
+    "explanation": "A queue makes BFS process vertices in order of discovery, level by level."
+  },
+  {
+    "category": "Complexity",
+    "text": "An algorithm runs two nested loops, each from 1 to n, with constant work inside. What is its time complexity?",
+    "options": [
+      "O(n)",
+      "O(n log n)",
+      "O(n^2)",
+      "O(2^n)"
+    ],
+    "correctIndex": 2,
+    "hint": "Count how many times the inner body runs for each pass of the outer loop.",
+    "explanation": "The inner body runs n times for each of the n outer iterations, giving n × n = O(n^2)."
+  },
+  {
+    "category": "Arrays",
+    "text": "What is the time complexity of accessing the element at index i in an array?",
+    "options": [
+      "O(1)",
+      "O(log n)",
+      "O(n)",
+      "O(i)"
+    ],
+    "correctIndex": 0,
+    "hint": "Arrays store elements in one contiguous block of memory.",
+    "explanation": "The address is base + i × element size, computed directly, so access is O(1)."
+  },
+  {
+    "category": "Dynamic programming",
+    "text": "Dynamic programming is most useful for problems that have overlapping subproblems and which other property?",
+    "options": [
+      "Greedy choice property",
+      "Optimal substructure",
+      "Linear time complexity",
+      "No recursion"
+    ],
+    "correctIndex": 1,
+    "hint": "Think about how the best solution to the whole problem relates to the best solutions of its parts.",
+    "explanation": "Dynamic programming needs optimal substructure (optimal solutions are built from optimal sub-solutions) plus overlapping subproblems to reuse."
+  }
+]

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Not available during the exam</title>
+  <style>
+    :root { --brand: #006fdb; --brand-soft: #e8f2fd; --amber: #ffbd59; --amber-soft: #fff4e3; --ink: #252726; --muted: #64748b; --line: #e2e8f0; }
+    * { box-sizing: border-box; margin: 0; }
+    body { min-height: 100vh; display: grid; place-items: center; padding: 32px; background: #f8fafc; color: var(--ink); font: 15px/1.55 Inter, 'Segoe UI', system-ui, sans-serif; }
+    main { max-width: 560px; }
+    .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--brand); margin-bottom: 8px; }
+    h1 { font-size: 26px; line-height: 1.25; letter-spacing: -0.02em; margin-bottom: 10px; }
+    p { color: #3f4447; margin-bottom: 16px; }
+    .query { padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 13.5px; margin-bottom: 16px; word-break: break-word; }
+    .help { padding: 14px 16px; border: 1px solid var(--amber); border-left-width: 4px; border-radius: 8px; background: var(--amber-soft); }
+    .help strong { display: block; margin-bottom: 2px; }
+    .note { margin-top: 18px; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Exam browser</p>
+    <h1 id="title">This page isn't available during the exam</h1>
+    <p id="detail"></p>
+    <div id="query" class="query" hidden></div>
+    <div class="help">
+      <strong>Need help understanding the question?</strong>
+      Go back to the Exam tab and open <b>Guided help</b>. It explains the concepts behind the question you're on, without giving away the answer.
+    </div>
+    <p class="note">This attempt was recorded and is visible to your proctor. It does not count as a warning.</p>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const titles = {
+      AI_SITE: 'AI assistants are switched off during the exam',
+      QUESTION_COPY: 'You can’t search for the exam question itself',
+      OPTION_LOOKUP: 'You can’t search for an answer option',
+      OFF_TOPIC: 'That search isn’t related to your question'
+    };
+    document.getElementById('title').textContent = titles[params.get('reason')] || document.getElementById('title').textContent;
+    document.getElementById('detail').textContent = params.get('detail') || '';
+    const q = params.get('q') || params.get('site');
+    if (q) {
+      const el = document.getElementById('query');
+      el.textContent = q;
+      el.hidden = false;
+    }
+  </script>
+</body>
+</html>

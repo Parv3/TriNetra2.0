@@ -1,0 +1,162 @@
+[
+  {
+    "id": "q1",
+    "text": "What is the time complexity of searching in a balanced Binary Search Tree?",
+    "prompt": "What is the time complexity of searching in a balanced Binary Search Tree?",
+    "category": "Algorithms",
+    "options": [
+      { "id": "opt_1a", "text": "O(1)" },
+      { "id": "opt_1b", "text": "O(log n)" },
+      { "id": "opt_1c", "text": "O(n)" },
+      { "id": "opt_1d", "text": "O(n^2)" }
+    ],
+    "correctOptionId": "opt_1b",
+    "explanation": "A balanced BST divides search space in half at each step, yielding logarithmic O(log n) time.",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q2",
+    "text": "Which HTTP status code indicates that a client must authenticate itself to get the requested response?",
+    "prompt": "Which HTTP status code indicates that a client must authenticate itself to get the requested response?",
+    "category": "Web Networking",
+    "options": [
+      { "id": "opt_2a", "text": "400 Bad Request" },
+      { "id": "opt_2b", "text": "401 Unauthorized" },
+      { "id": "opt_2c", "text": "403 Forbidden" },
+      { "id": "opt_2d", "text": "404 Not Found" }
+    ],
+    "correctOptionId": "opt_2b",
+    "explanation": "401 Unauthorized indicates that the request lacks valid authentication credentials.",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q3",
+    "text": "What is the primary role of Electron contextBridge in desktop applications?",
+    "prompt": "What is the primary role of Electron contextBridge in desktop applications?",
+    "category": "Desktop Architecture",
+    "options": [
+      { "id": "opt_3a", "text": "To compile native C++ modules" },
+      { "id": "opt_3b", "text": "To securely expose controlled APIs from preload script to isolated renderer" },
+      { "id": "opt_3c", "text": "To download offline AI weights from the internet" },
+      { "id": "opt_3d", "text": "To bypass Node.js security sandbox" }
+    ],
+    "correctOptionId": "opt_3b",
+    "explanation": "contextBridge allows safe IPC exposure without disabling context isolation or granting renderer direct Node access.",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q4",
+    "text": "In offline computer vision proctoring, what metric is typically used to detect natural blinks without false gaze diversion?",
+    "prompt": "In offline computer vision proctoring, what metric is typically used to detect natural blinks without false gaze diversion?",
+    "category": "Computer Vision",
+    "options": [
+      { "id": "opt_4a", "text": "EAR (Eye Aspect Ratio) under 400ms duration" },
+      { "id": "opt_4b", "text": "Euler Yaw angle greater than 45 degrees" },
+      { "id": "opt_4c", "text": "Offscreen canvas frame width" },
+      { "id": "opt_4d", "text": "WebP snapshot byte size" }
+    ],
+    "correctOptionId": "opt_4a",
+    "explanation": "Eye Aspect Ratio drops momentarily during a natural blink (<400ms), which hysteresis debouncing distinguishes from prolonged eye closure.",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q5",
+    "text": "Which data structure is best suited for implementing a server-side LRU cache?",
+    "prompt": "Which data structure is best suited for implementing a server-side LRU cache?",
+    "category": "Data Structures",
+    "options": [
+      { "id": "opt_5a", "text": "Singly Linked List" },
+      { "id": "opt_5b", "text": "Hash Map combined with Doubly Linked List" },
+      { "id": "opt_5c", "text": "Binary Heap" },
+      { "id": "opt_5d", "text": "Stack" }
+    ],
+    "correctOptionId": "opt_5b",
+    "explanation": "Combining a hash map for O(1) lookup with a doubly linked list for O(1) node repositioning gives optimal LRU cache performance.",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q6",
+    "text": "Which protocol is strictly recommended for production WebSocket communication?",
+    "prompt": "Which protocol is strictly recommended for production WebSocket communication?",
+    "category": "Web Networking",
+    "options": [
+      { "id": "opt_6a", "text": "ws://" },
+      { "id": "opt_6b", "text": "wss://" },
+      { "id": "opt_6c", "text": "ftp://" },
+      { "id": "opt_6d", "text": "http://" }
+    ],
+    "correctOptionId": "opt_6b",
+    "explanation": "wss:// encrypts traffic via TLS, preventing eavesdropping and proxy tampering.",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q7",
+    "text": "In atomic file writing, what technique guarantees crash resilience?",
+    "prompt": "In atomic file writing, what technique guarantees crash resilience?",
+    "category": "Systems Programming",
+    "options": [
+      { "id": "opt_7a", "text": "Direct in-place file overwriting" },
+      { "id": "opt_7b", "text": "Writing to a temporary sibling file and executing an atomic filesystem rename" },
+      { "id": "opt_7c", "text": "Flushing console logs before each write" },
+      { "id": "opt_7d", "text": "Disabling file permissions" }
+    ],
+    "correctOptionId": "opt_7b",
+    "explanation": "Atomic rename replaces the target file atomically at the OS filesystem level, preventing partially-written corrupted files.",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q8",
+    "text": "What does the Euler yaw angle measure in head pose estimation?",
+    "prompt": "What does the Euler yaw angle measure in head pose estimation?",
+    "category": "Computer Vision",
+    "options": [
+      { "id": "opt_8a", "text": "Horizontal turning of the head (looking left or right)" },
+      { "id": "opt_8b", "text": "Vertical tilting of the head (looking up or down)" },
+      { "id": "opt_8c", "text": "Lateral tilting towards the shoulder" },
+      { "id": "opt_8d", "text": "Distance of the nose from the webcam" }
+    ],
+    "correctOptionId": "opt_8a",
+    "explanation": "Yaw represents horizontal rotation around the vertical Y-axis (turning head left or right).",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q9",
+    "text": "Which HTTP method should be used for idempotent answer updates in a REST API?",
+    "prompt": "Which HTTP method should be used for idempotent answer updates in a REST API?",
+    "category": "API Design",
+    "options": [
+      { "id": "opt_9a", "text": "POST or PUT" },
+      { "id": "opt_9b", "text": "DELETE only" },
+      { "id": "opt_9c", "text": "TRACE" },
+      { "id": "opt_9d", "text": "CONNECT" }
+    ],
+    "correctOptionId": "opt_9a",
+    "explanation": "PUT (or parameterized POST with resource ID) allows clients to update state idempotently without side-effect duplication.",
+    "marks": 1,
+    "negativeMarks": 0
+  },
+  {
+    "id": "q10",
+    "text": "What is the default strike threshold that triggers automated disqualification in the proctoring engine?",
+    "prompt": "What is the default strike threshold that triggers automated disqualification in the proctoring engine?",
+    "category": "Proctoring Rules",
+    "options": [
+      { "id": "opt_10a", "text": "1 strike" },
+      { "id": "opt_10b", "text": "3 strikes" },
+      { "id": "opt_10c", "text": "20 strikes" },
+      { "id": "opt_10d", "text": "Unlimited strikes" }
+    ],
+    "correctOptionId": "opt_10b",
+    "explanation": "3 strikes is the standard competition threshold before automated test termination / disqualification.",
+    "marks": 1,
+    "negativeMarks": 0
+  }
+]

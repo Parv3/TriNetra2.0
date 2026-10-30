@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trinetra Proctor Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/admin.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand">
+        <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
+          <path d="M1.5 9c2-3.6 4.5-5.4 7.5-5.4S14.5 5.4 16.5 9c-2 3.6-4.5 5.4-7.5 5.4S3.5 12.6 1.5 9z" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <circle cx="9" cy="9" r="2.2" fill="currentColor"/>
+        </svg>
+        <span class="brand-name">Trinetra</span>
+        <span class="brand-tag">Proctor console</span>
+      </div>
+      <label class="exam-picker">
+        <span class="sr-only">Exam</span>
+        <select id="admin-exam-select">
+          <option value="ALL">All exams</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="topbar-right">
+      <span class="topbar-meta"><span class="dot-live"></span><span class="mono" id="live-clock">--:--:--</span></span>
+      <span class="topbar-meta mono" id="server-url-display">127.0.0.1:4100</span>
+      <button id="btn-toggle-autorefresh" class="btn btn-ghost btn-sm active" title="Refresh every 5 seconds">
+        <span class="refresh-dot"></span> Auto-refresh
+      </button>
+      <button id="btn-manual-refresh" class="btn btn-ghost btn-sm" title="Refresh now">Refresh</button>
+      <button id="btn-open-exam-rules" class="btn btn-ghost btn-sm">Exam rules</button>
+      <button id="btn-open-create-exam" class="btn btn-amber btn-sm">New exam</button>
+    </div>
+  </header>
+
+  <div class="share-bar" id="network-broadcast-bar">
+    <span>Candidates on other laptops open</span>
+    <a id="net-candidate-link" class="mono" href="#" target="_blank">—</a>
+    <button id="btn-copy-candidate-link" class="link-btn">Copy</button>
+    <span class="share-sep"></span>
+    <span>Other proctors:</span>
+    <a id="net-share-link" class="mono" href="http://127.0.0.1:4100/admin" target="_blank">http://127.0.0.1:4100/admin</a>
+    <button id="btn-copy-net-link" class="link-btn"><span id="copy-btn-text">Copy</span></button>
+    <span id="db-status" class="db-status share-bar-end hidden"></span>
+    <a href="/app/index.html" target="_blank" class="link-btn">Open candidate app</a>
+  </div>
+
+  <main class="container">
+
+    <section class="kpis" aria-label="Summary">
+      <div class="kpi kpi-live">
+        <span class="kpi-label">Taking the exam now</span>
+        <span class="kpi-value" id="kpi-active-count">0</span>
+        <span class="kpi-note">live sessions</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label">Sessions</span>
+        <span class="kpi-value" id="kpi-total-count">0</span>
+        <span class="kpi-note" id="kpi-submitted-count">0 submitted</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label">Violations</span>
+        <span class="kpi-value" id="kpi-violations-count">0</span>
+        <span class="kpi-note">camera, focus and device</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label">AI assistant use</span>
+        <span class="kpi-value" id="kpi-ai-count">0</span>
+        <span class="kpi-note">visits and captured prompts</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label">Average integrity</span>
+        <span class="kpi-value" id="kpi-integrity-score">100<span class="unit">/100</span></span>
+        <span class="kpi-note" id="kpi-disqualified-subtext">0 terminated</span>
+      </div>
+    </section>
+
+    <nav class="view-tabs" role="tablist">
+      <button class="proctor-tab-btn" id="tab-btn-exams" data-view="exams">Exams</button>
+      <button class="proctor-tab-btn active" id="tab-btn-grid" data-view="grid">Live grid <span class="tab-count" id="badge-grid-count">0</span></button>
+      <button class="proctor-tab-btn" id="tab-btn-table" data-view="table">Roster and scores</button>
+      <button class="proctor-tab-btn" id="tab-btn-logs" data-view="logs">Activity stream</button>
+      <span class="view-tabs-meta">Showing <strong id="grid-room-label">all exams</strong></span>
+    </nav>
+
+    <section id="section-exams" class="dashboard-view-section hidden">
+      <div class="card table-card">
+        <table class="dashboard-table">
+          <thead>
+            <tr><th>Exam</th><th>Join code</th><th>Questions</th><th>Duration</th><th>Candidates</th><th>Status</th><th class="text-right"></th></tr>
+          </thead>
+          <tbody id="exams-table-body">
+            <tr><td colspan="7" class="text-center text-muted">Loading exams…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="section-surveillance-grid" class="dashboard-view-section">
+      <div class="surveillance-grid" id="surveillance-grid-container">
+        <div class="grid-empty-state">Connecting to candidate streams…</div>
+      </div>
+    </section>
+
+    <section id="section-candidate-table" class="dashboard-view-section hidden">
+      <div class="toolbar">
+        <input type="search" id="filter-search-input" class="input" placeholder="Search name, roll number or session ID" autocomplete="off">
+        <button id="btn-clear-search" class="link-btn hidden">Clear</button>
+        <div class="segmented" id="status-chips">
+          <button class="chip active" data-status="ALL">All</button>
+          <button class="chip" data-status="ACTIVE">Live</button>
+          <button class="chip" data-status="SUBMITTED">Submitted</button>
+          <button class="chip" data-status="DISQUALIFIED">Terminated</button>
+        </div>
+        <select id="filter-risk-select" class="input input-select">
+          <option value="ALL">Any risk</option>
+          <option value="LOW_RISK">Low risk</option>
+          <option value="MEDIUM_RISK">Medium risk</option>
+          <option value="HIGH_RISK">High risk</option>
+        </select>
+        <span id="sessions-counter-text" class="text-muted toolbar-end">Loading…</span>
+      </div>
+
+      <div class="card table-card">
+        <table class="dashboard-table">
+          <thead>
+            <tr>
+              <th>Candidate</th>
+              <th>Status</th>
+              <th>Integrity</th>
+              <th>Warnings</th>
+              <th>AI / browsing</th>
+              <th>Score</th>
+              <th>Started</th>
+              <th class="text-right"></th>
+            </tr>
+          </thead>
+          <tbody id="sessions-table-body">
+            <tr><td colspan="8" class="text-center text-muted">Loading sessions…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="section-live-logs" class="dashboard-view-section hidden">
+      <div class="card logs-card">
+        <div class="logs-header">
+          <div class="logs-title">
+            <strong>Activity stream</strong>
+            <span class="text-muted" id="logs-count-badge">0 events</span>
+          </div>
+          <div class="segmented">
+            <button class="log-filter-btn chip active" data-filter="all">All</button>
+            <button class="log-filter-btn chip" data-filter="keyboard">Keyboard</button>
+            <button class="log-filter-btn chip" data-filter="mouse">Mouse</button>
+            <button class="log-filter-btn chip" data-filter="focus">Focus</button>
+            <button class="log-filter-btn chip" data-filter="vision">Camera</button>
+          </div>
+          <button id="btn-clear-logs" class="link-btn">Clear</button>
+        </div>
+        <div class="logs-terminal" id="live-logs-terminal">
+          <div class="log-entry log-system">
+            <span class="log-time">—</span>
+            <span class="log-text">Listening for candidate activity…</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Session inspector -->
+  <div id="inspector-modal" class="modal-backdrop hidden">
+    <aside class="inspector-drawer" aria-label="Session inspector">
+      <header class="drawer-header">
+        <div>
+          <div class="drawer-title-row">
+            <h2 id="drawer-candidate-name">Candidate</h2>
+            <span id="drawer-status-pill" class="badge">—</span>
+            <span id="drawer-risk-pill" class="badge">—</span>
+          </div>
+          <div class="drawer-sub-row">
+            <span class="mono" id="drawer-student-id">—</span>
+            <span class="mono text-muted" id="drawer-session-id">—</span>
+            <span id="drawer-time-started">—</span>
+          </div>
+        </div>
+        <div class="drawer-actions">
+          <button id="btn-export-html-report" class="btn btn-outline btn-sm">Export report</button>
+          <button id="btn-drawer-warn" class="btn btn-outline btn-sm">Issue warning</button>
+          <button id="btn-drawer-disqualify" class="btn btn-danger btn-sm">Terminate</button>
+          <button id="btn-drawer-resume" class="btn btn-primary btn-sm hidden">Resume exam</button>
+          <button id="btn-close-drawer" class="icon-btn" aria-label="Close">&times;</button>
+        </div>
+      </header>
+
+      <div class="drawer-content">
+        <section class="drawer-top">
+          <div class="live-feed" id="drawer-live-proctor-panel">
+            <div class="live-viewport">
+              <video id="live-video" class="hidden" autoplay playsinline muted></video>
+              <img id="live-stream-viewport" class="hidden" src="" alt="Latest camera frame">
+              <span id="live-mode" class="live-mode hidden"></span>
+              <div id="live-stream-placeholder" class="live-placeholder"><span class="ph-text">Waiting for a camera frame…</span></div>
+            </div>
+            <div class="live-readouts">
+              <span id="live-hud-faces" class="badge badge-emerald">1 face</span>
+              <span id="live-hud-gaze" class="badge badge-emerald">On screen</span>
+              <span id="live-hud-pose" class="badge badge-slate mono">Yaw 0° · Pitch 0</span>
+              <span id="live-hud-q" class="badge badge-slate">Question —</span>
+            </div>
+            <div class="message-row">
+              <input type="text" id="input-proctor-custom-msg" class="input" placeholder="Message to show on the candidate's screen">
+              <button id="btn-send-custom-msg" class="btn btn-primary btn-sm">Send</button>
+            </div>
+          </div>
+
+          <div class="drawer-side">
+            <div class="card-lite">
+              <h3>Identity</h3>
+              <div class="identity">
+                <div id="drawer-baseline-photo" class="photo-frame"><span class="photo-placeholder">No reference photo</span></div>
+                <dl class="meta">
+                  <dt>Verified by</dt><dd>One-time code and reference photo</dd>
+                  <dt>Email</dt><dd id="drawer-email">—</dd>
+                </dl>
+              </div>
+            </div>
+            <div class="card-lite">
+              <h3>Integrity score</h3>
+              <div class="integrity">
+                <span class="gauge-value" id="drawer-gauge-val">100</span><span class="gauge-max">/100</span>
+              </div>
+              <dl class="deductions">
+                <div class="deduction-item" id="deduction-violations"><dt>Violations</dt><dd class="mono deduction-val">−0</dd></div>
+                <div class="deduction-item" id="deduction-ai"><dt>AI assistant use</dt><dd class="mono deduction-val">−0</dd></div>
+                <div class="deduction-item" id="deduction-tabs"><dt>Tab switching</dt><dd class="mono deduction-val">−0</dd></div>
+                <div class="deduction-item" id="deduction-clipboard"><dt>Copy / paste</dt><dd class="mono deduction-val">−0</dd></div>
+              </dl>
+            </div>
+          </div>
+        </section>
+
+        <section class="drawer-section insights-section">
+          <h3 id="drawer-insights-header">Insights</h3>
+          <div id="drawer-insights"><div class="empty-state">Nothing unusual found.</div></div>
+        </section>
+
+        <section class="drawer-section">
+          <h3 id="drawer-searches-header">Sites and searches</h3>
+          <div id="drawer-searches-table-container"><div class="empty-state">No other sites opened.</div></div>
+        </section>
+
+        <section class="drawer-section">
+          <h3 id="drawer-violations-header">Violations</h3>
+          <div id="drawer-violations-gallery" class="snapshot-gallery"><div class="empty-state">No violations recorded.</div></div>
+        </section>
+
+        <section class="drawer-section">
+          <h3 id="drawer-timeline-header">Timeline</h3>
+          <div id="drawer-timeline-container" class="timeline-stream"><div class="empty-state">No events recorded.</div></div>
+        </section>
+
+        <section class="drawer-section">
+          <h3 id="drawer-assist-header">Guided help transcript</h3>
+          <div id="drawer-assist"><div class="empty-state">Guided help was not used.</div></div>
+        </section>
+
+        <section class="drawer-section">
+          <h3 id="drawer-questions-header">Answers</h3>
+          <div id="drawer-questions-table-container"><div class="empty-state">Not graded yet.</div></div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Terminate confirmation -->
+  <div id="action-confirm-modal" class="modal-backdrop modal-center hidden">
+    <div class="dialog">
+      <h3 id="action-modal-title">Terminate this session?</h3>
+      <p id="action-modal-desc" class="text-muted">The candidate's exam locks immediately and their answers are submitted. This cannot be undone.</p>
+      <label class="field-label" for="action-reason-input">Reason (recorded in the audit log)</label>
+      <input type="text" id="action-reason-input" class="input" placeholder="e.g. Repeated use of an AI assistant">
+      <div class="dialog-actions">
+        <button id="btn-cancel-action" class="btn btn-outline">Cancel</button>
+        <button id="btn-confirm-action" class="btn btn-danger">Terminate session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resume a terminated attempt -->
+  <div id="resume-modal" class="modal-backdrop modal-center hidden">
+    <div class="dialog">
+      <h3>Resume this attempt?</h3>
+      <p class="text-muted">The candidate's exam reopens immediately with their saved answers. The time they spent locked out is given back.</p>
+      <label class="field-label" for="resume-reason">Reason (recorded in the audit log)</label>
+      <input type="text" id="resume-reason" class="input" placeholder="e.g. False positive — checked the recording">
+      <div class="rules">
+        <label class="rule"><span><strong>Reset warnings to zero</strong><small>Otherwise the next warning may end the attempt again.</small></span><input type="checkbox" class="switch" id="resume-reset" checked></label>
+        <div class="rule"><span><strong>Extra time</strong><small>Minutes added on top of the time they had left.</small></span><input type="number" id="resume-extra" class="input input-small" value="0" min="0" max="120"></div>
+      </div>
+      <p id="resume-status" class="text-muted dialog-status"></p>
+      <div class="dialog-actions">
+        <button id="btn-cancel-resume" class="btn btn-outline">Cancel</button>
+        <button id="btn-confirm-resume" class="btn btn-primary">Resume exam</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exam rules -->
+  <div id="exam-rules-modal" class="modal-backdrop modal-center hidden">
+    <div class="dialog dialog-wide">
+      <div class="dialog-head">
+        <div>
+          <h3>Exam rules</h3>
+          <p class="text-muted">Applies to <span id="rules-exam-title">this exam</span>. Changes reach candidates already in progress.</p>
+        </div>
+        <button id="btn-close-rules-modal" class="icon-btn" aria-label="Close">&times;</button>
+      </div>
+      <div class="rules">
+        <label class="rule"><span><strong>Camera proctoring</strong><small>Face presence, other people in frame, gaze and identity checks.</small></span><input type="checkbox" class="switch" id="toggle-rule-vision" checked></label>
+        <label class="rule"><span><strong>Allow other tabs</strong><small>Candidates may open tabs; every address and search is recorded.</small></span><input type="checkbox" class="switch" id="toggle-rule-multitab" checked></label>
+        <label class="rule"><span><strong>Flag AI assistants</strong><small>ChatGPT, Claude, Gemini, Copilot, Perplexity, DeepSeek and their prompts.</small></span><input type="checkbox" class="switch" id="toggle-rule-aiguard" checked></label>
+        <label class="rule"><span><strong>Block copy and paste</strong><small>Inside the exam tab; attempts are still logged.</small></span><input type="checkbox" class="switch" id="toggle-rule-clipboard" checked></label>
+        <label class="rule"><span><strong>Guided help</strong><small>In-exam assistant that explains concepts and never gives answers.</small></span><input type="checkbox" class="switch" id="toggle-rule-assist" checked></label>
+        <div class="rule"><span><strong>Camera strictness</strong><small>How quickly looking away, leaving the frame or a phone in view turns into a warning.</small></span>
+          <select id="select-rule-strictness" class="input input-select">
+            <option value="relaxed">Relaxed</option>
+            <option value="standard" selected>Standard</option>
+            <option value="strict">Strict</option>
+          </select>
+        </div>
+        <div class="rule"><span><strong>Warnings before termination</strong><small>The attempt ends automatically on this warning.</small></span>
+          <select id="select-rule-strikes" class="input input-select">
+            <option value="1">1</option>
+            <option value="3" selected>3</option>
+            <option value="5">5</option>
+          </select>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <span id="rules-status-msg" class="text-muted dialog-status"></span>
+        <button id="btn-save-exam-rules" class="btn btn-primary">Save rules</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New exam -->
+  <div id="create-exam-modal" class="modal-backdrop modal-center hidden">
+    <div class="dialog dialog-wide">
+      <div class="dialog-head">
+        <div>
+          <h3>New exam</h3>
+          <p class="text-muted">Candidates see it in the exam list as soon as it is created.</p>
+        </div>
+        <button id="btn-close-create-modal" class="icon-btn" aria-label="Close">&times;</button>
+      </div>
+      <div class="form-grid">
+        <div><label class="field-label" for="input-new-exam-title">Title</label><input type="text" id="input-new-exam-title" class="input" placeholder="Distributed Systems — Midterm"></div>
+        <div><label class="field-label" for="input-new-exam-code">Code</label><input type="text" id="input-new-exam-code" class="input mono" placeholder="Generated if empty"></div>
+        <div><label class="field-label" for="input-new-exam-duration">Duration (minutes)</label><input type="number" id="input-new-exam-duration" class="input" value="30" min="5" max="180"></div>
+        <div></div>
+        <div class="span-2"><label class="field-label" for="input-new-exam-desc">Instructions for candidates</label><input type="text" id="input-new-exam-desc" class="input" placeholder="Documentation allowed. AI assistants are not."></div>
+      </div>
+      <div class="builder">
+        <div class="builder-head">
+          <h4>Questions <span id="builder-count" class="text-muted"></span></h4>
+          <div class="builder-actions">
+            <label class="link-btn" for="input-import-questions">Import JSON</label>
+            <input type="file" id="input-import-questions" accept=".json,application/json" hidden>
+            <button type="button" id="btn-add-question" class="btn btn-outline btn-sm">Add question</button>
+          </div>
+        </div>
+        <p class="builder-help">Pick the correct option with the radio button. The explanation is shown to candidates only after they submit. Hints feed Guided help — they should explain the concept, not the answer.</p>
+        <div id="question-builder" class="question-builder"></div>
+      </div>
+
+      <div class="rules">
+        <label class="rule"><span><strong>Camera proctoring</strong></span><input type="checkbox" class="switch" id="toggle-new-rule-vision" checked></label>
+        <label class="rule"><span><strong>Allow other tabs</strong></span><input type="checkbox" class="switch" id="toggle-new-rule-multitab" checked></label>
+        <label class="rule"><span><strong>Flag AI assistants</strong></span><input type="checkbox" class="switch" id="toggle-new-rule-aiguard" checked></label>
+        <label class="rule"><span><strong>Block copy and paste</strong></span><input type="checkbox" class="switch" id="toggle-new-rule-clipboard" checked></label>
+        <label class="rule"><span><strong>Guided help</strong><small>Concept explanations that never reveal the answer.</small></span><input type="checkbox" class="switch" id="toggle-new-rule-assist" checked></label>
+        <div class="rule"><span><strong>Camera strictness</strong><small>How quickly looking away, leaving the frame or a phone in view turns into a warning.</small></span>
+          <select id="select-new-rule-strictness" class="input input-select">
+            <option value="relaxed">Relaxed</option>
+            <option value="standard" selected>Standard</option>
+            <option value="strict">Strict</option>
+          </select>
+        </div>
+        <div class="rule"><span><strong>Warnings before termination</strong></span>
+          <select id="select-new-rule-strikes" class="input input-select">
+            <option value="1">1</option>
+            <option value="3" selected>3</option>
+            <option value="5">5</option>
+          </select>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <span id="create-exam-status-msg" class="text-muted dialog-status"></span>
+        <button id="btn-submit-create-exam" class="btn btn-primary">Create exam</button>
+      </div>
+      <div id="exam-created" class="exam-created hidden">
+        <p class="text-muted">Exam created. Share this code with candidates:</p>
+        <div class="join-code" id="exam-created-code">———</div>
+        <div class="dialog-actions">
+          <button id="btn-copy-exam-code" class="btn btn-outline btn-sm">Copy code</button>
+          <button id="btn-done-create" class="btn btn-primary btn-sm">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Urgent alert -->
+  <div id="extreme-suspicion-modal" class="modal-backdrop modal-center hidden">
+    <div class="dialog dialog-alert">
+      <div class="dialog-head">
+        <div>
+          <p class="alert-eyebrow">Needs attention now</p>
+          <h3 id="suspicion-reason-text">Serious violation detected</h3>
+        </div>
+        <button id="btn-close-suspicion-modal" class="icon-btn" aria-label="Close">&times;</button>
+      </div>
+      <div class="alert-body">
+        <img id="suspicion-snapshot-img" src="" alt="Frame captured with the alert">
+        <div>
+          <div class="alert-name" id="suspicion-candidate-name">Candidate</div>
+          <div class="mono text-muted" id="suspicion-candidate-id">—</div>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button id="btn-suspicion-inspect" class="btn btn-outline btn-sm">Inspect</button>
+        <button id="btn-suspicion-warn" class="btn btn-outline btn-sm">Issue warning</button>
+        <button id="btn-suspicion-disqualify" class="btn btn-danger btn-sm">Terminate</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="proctor-toast-container" class="toast-container" aria-live="polite"></div>
+
+  <script src="js/adminDashboard.js"></script>
+</body>
+</html>

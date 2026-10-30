@@ -1,0 +1,45 @@
+# Central Trinetra server with PostgreSQL and automatic HTTPS (Caddy + Let's Encrypt).
+#   1. Point a DNS name (e.g. exams.your-college.edu) at this machine; open ports 80 and 443.
+#   2. Copy deploy/.env.example to deploy/.env and fill it in.
+#   3. docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trinetra
+      POSTGRES_USER: trinetra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Exposed so teachers can connect with psql / pgAdmin / DBeaver (read-only login, see docs/TEACHER_SQL.md).
+      # Remove this mapping if teachers query from inside the network some other way.
+      - "5432:5432"
+
+  trinetra:
+    build: ..
+    restart: unless-stopped
+    depends_on: [postgres]
+    environment:
+      DATABASE_URL: postgres://trinetra:${POSTGRES_PASSWORD}@postgres:5432/trinetra
+      ALLOW_MASTER_OTP: "false"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - trinetra-data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [trinetra]
+    ports:
+      - "80:80"
+      - "443:443"
+    command: caddy reverse-proxy --from ${TRINETRA_DOMAIN} --to trinetra:4100
+    volumes:
+      - caddy-data:/data
+
+volumes:
+  pgdata:
+  trinetra-data:
+  caddy-data:

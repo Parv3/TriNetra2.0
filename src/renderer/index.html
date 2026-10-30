@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' http: https: ws: wss:;
+                 script-src 'self' 'unsafe-inline' 'unsafe-eval';
+                 style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                 worker-src 'self' blob:;
+                 font-src 'self' https://fonts.gstatic.com data:;
+                 img-src 'self' data: blob: http: https:;
+                 media-src 'self' blob:;
+                 connect-src 'self' http: https: ws: wss:;">
+  <title>Trinetra Secure Browser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+
+  <!-- Title bar (40px). Together with the tab strip and address bar this is the
+       114px of chrome that guest WebContentsViews are laid out beneath. -->
+  <header id="titlebar">
+    <div class="titlebar-drag">
+      <div class="wordmark">
+        <svg class="wordmark-mark" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <path d="M1.5 9c2-3.6 4.5-5.4 7.5-5.4S14.5 5.4 16.5 9c-2 3.6-4.5 5.4-7.5 5.4S3.5 12.6 1.5 9z" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <circle cx="9" cy="9" r="2.2" fill="currentColor"/>
+        </svg>
+        <span>Trinetra</span>
+        <span class="wordmark-sub">Secure Browser</span>
+      </div>
+      <div class="titlebar-meta">
+        <span id="titlebar-exam-title" class="titlebar-exam hidden"></span>
+        <span id="titlebar-session-badge" class="titlebar-candidate hidden"></span>
+        <button id="btn-open-dashboard" class="titlebar-link" title="Open the proctor console">Proctor console</button>
+      </div>
+    </div>
+    <div class="titlebar-controls">
+      <button id="btn-minimize" class="titlebar-btn" aria-label="Minimize">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg>
+      </button>
+      <button id="btn-maximize" class="titlebar-btn" aria-label="Maximize">
+        <svg width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor"/></svg>
+      </button>
+      <button id="btn-close" class="titlebar-btn titlebar-btn-close" aria-label="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav id="tab-strip-area" class="hidden">
+    <div id="tab-strip"></div>
+    <button id="btn-new-tab" class="tab-new-btn" title="New tab" aria-label="New tab">
+      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+  </nav>
+  <div id="omnibox-bar" class="hidden">
+    <div class="omnibox-wrapper">
+      <input id="omnibox-input" type="text" placeholder="Search or enter address — pages and searches are recorded" spellcheck="false" autocomplete="off">
+      <span id="omnibox-ai-badge" class="omnibox-flag hidden">AI assistant · flagged to proctor</span>
+    </div>
+  </div>
+
+  <div id="warning-banner" class="warning-banner hidden" role="alert">
+    <span id="warning-text">Proctoring warning</span>
+    <span id="strike-counter" class="warning-count">Warning 0 of 3</span>
+  </div>
+
+  <main id="app-content">
+
+    <!-- ── Sign-in ──────────────────────────────────────────── -->
+    <section id="view-auth" class="view active">
+      <div class="auth-layout">
+        <aside class="auth-rail">
+          <p class="eyebrow">Before you begin</p>
+          <ol class="stepper" id="auth-stepper">
+            <li data-step="consent" class="current"><span class="stepper-num">1</span>Rules and consent</li>
+            <li data-step="id"><span class="stepper-num">2</span>Join exam</li>
+            <li data-step="otp"><span class="stepper-num">3</span>Verify identity</li>
+            <li data-step="camera"><span class="stepper-num">4</span>Camera check</li>
+          </ol>
+          <div class="auth-rail-foot">
+            <p>Problems signing in? Contact your invigilator. Keep this window open — your attempt is tied to this device.</p>
+            <p class="powered">Assessment hosted by <strong>Where U Elevate</strong></p>
+          </div>
+        </aside>
+
+        <div class="auth-main">
+
+          <div id="auth-step-consent" class="auth-step active">
+            <h1 class="page-title">Exam rules and monitoring</h1>
+            <p class="lede">This browser records what happens on your device while the exam is open. Read what is monitored, then confirm to continue.</p>
+
+            <dl class="rules-list">
+              <div>
+                <dt>Camera</dt>
+                <dd>Your webcam stays on. Software checks that one face is visible, that it is the person who signed in, and that you are looking at the screen. A frame is saved whenever something is flagged.</dd>
+              </div>
+              <div>
+                <dt>Browsing</dt>
+                <dd>You may open other tabs to look things up. Every address and search is recorded, searches must relate to the question on screen, and answer boxes are hidden from results. AI chat sites are blocked — use the built-in <strong>Guided help</strong>, which explains concepts but never gives answers.</dd>
+              </div>
+              <div>
+                <dt>Keyboard and mouse</dt>
+                <dd>Shortcut use (copy, paste, developer tools), typing rate and mouse activity are logged.</dd>
+              </div>
+              <div>
+                <dt>Your device</dt>
+                <dd>The exam runs full-screen. Switching to another application, connecting a second display, or running screen-sharing or remote-desktop software is reported.</dd>
+              </div>
+            </dl>
+
+            <div class="callout">
+              <strong>Three warnings end the attempt.</strong>
+              Each confirmed violation counts as one warning. On the last one your answers are submitted automatically and the attempt is sent for review.
+            </div>
+
+            <label class="checkbox">
+              <input type="checkbox" id="check-consent">
+              <span>I have read the rules and agree to be monitored for the duration of this exam.</span>
+            </label>
+            <p id="auth-error-consent" class="field-error hidden"></p>
+
+            <div class="actions actions-start">
+              <button id="btn-continue-to-auth" class="btn btn-primary">Continue</button>
+            </div>
+          </div>
+
+          <div id="auth-credentials-card" class="hidden">
+
+            <div id="auth-step-id" class="auth-step hidden">
+              <h1 class="page-title">Join your exam</h1>
+              <p class="lede">Enter the exam code your proctor gave you, with your name and roll number.</p>
+
+              <div class="field">
+                <label class="field-label" for="input-exam-code">Exam code</label>
+                <input id="input-exam-code" class="input input-code" type="text" placeholder="XXX-XXX" maxlength="9" autocomplete="off" spellcheck="false">
+                <div id="selected-exam-meta" class="exam-preview hidden"></div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label class="field-label" for="input-student-name">Full name</label>
+                  <input id="input-student-name" class="input" type="text" placeholder="As on your ID card" autocomplete="name" spellcheck="false">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="input-student-id">Roll number</label>
+                  <input id="input-student-id" class="input input-mono" type="text" placeholder="e.g. 21CS042" autocomplete="off" spellcheck="false">
+                </div>
+              </div>
+              <p id="auth-error-id" class="field-error hidden"></p>
+
+              <div class="actions actions-start">
+                <button id="btn-request-otp" class="btn btn-primary">Continue</button>
+                <button id="btn-back-to-consent" class="btn btn-quiet">Back</button>
+              </div>
+            </div>
+
+            <div id="auth-step-profile" class="auth-step hidden">
+              <h1 class="page-title">Create your profile</h1>
+              <p class="lede">This is the first time <span id="profile-roll" class="mono"></span> has signed in. Your profile links every exam you take to you; next time you only need your code, name and roll number.</p>
+
+              <div class="profile-card">
+                <div><span class="field-label">Name</span><span id="profile-name"></span></div>
+                <div><span class="field-label">Roll number</span><span id="profile-roll-2" class="mono"></span></div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label class="field-label" for="input-profile-email">Email</label>
+                  <input id="input-profile-email" class="input" type="email" placeholder="you@college.edu" autocomplete="email">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="input-profile-institution">College or institution</label>
+                  <input id="input-profile-institution" class="input" type="text" placeholder="Optional" autocomplete="organization">
+                </div>
+              </div>
+              <p id="auth-error-profile" class="field-error hidden"></p>
+
+              <div class="actions actions-start">
+                <button id="btn-create-profile" class="btn btn-primary">Create profile and continue</button>
+                <button id="btn-back-from-profile" class="btn btn-quiet">Back</button>
+              </div>
+            </div>
+
+            <div id="auth-step-otp" class="auth-step hidden">
+              <h1 class="page-title">Enter your one-time code</h1>
+              <p class="lede">A 6-digit code was issued for <span id="otp-target" class="mono">your roll number</span>. It expires in 5 minutes.</p>
+
+              <div class="otp-inputs" role="group" aria-label="One-time code">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 1">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="Digit 2">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="Digit 3">
+                <span class="otp-sep" aria-hidden="true"></span>
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="Digit 4">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="Digit 5">
+                <input class="otp-digit" type="text" maxlength="1" inputmode="numeric" autocomplete="off" aria-label="Digit 6">
+              </div>
+              <p id="auth-dev-otp" class="dev-note hidden"></p>
+              <p id="auth-error-otp" class="field-error hidden"></p>
+
+              <div class="actions actions-start">
+                <button id="btn-verify-otp" class="btn btn-primary">Verify code</button>
+                <button id="btn-back-to-id" class="btn btn-quiet">Back</button>
+              </div>
+            </div>
+
+            <div id="auth-step-camera" class="auth-step hidden">
+              <h1 class="page-title">Camera check</h1>
+              <p class="lede">Sit where you will take the exam and face the screen. We take one reference photo and use it to confirm it is still you throughout the exam.</p>
+
+              <div class="camera-check">
+                <div class="camera-frame">
+                  <video id="camera-preview" autoplay playsinline muted></video>
+                  <canvas id="camera-auth-canvas" class="camera-hud"></canvas>
+                  <canvas id="camera-canvas" class="hidden"></canvas>
+                  <div class="camera-guide" aria-hidden="true"></div>
+                </div>
+                <ul class="check-list" id="camera-checklist">
+                  <li data-check="camera">Camera connected</li>
+                  <li data-check="face">Exactly one face in frame</li>
+                  <li data-check="gaze">Facing the screen</li>
+                  <li data-check="light">Face clearly lit</li>
+                  <li data-check="audio">No earphones or headset connected</li>
+                </ul>
+              </div>
+
+              <div id="camera-status" class="status-line">
+                <span class="status-dot"></span>
+                <span class="status-text">Waiting for camera…</span>
+              </div>
+              <div id="camera-help" class="camera-help hidden"></div>
+              <p id="auth-error-camera" class="field-error hidden"></p>
+
+              <div class="actions actions-start">
+                <button id="btn-capture-face" class="btn btn-primary">Take photo and start exam</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Exam ─────────────────────────────────────────────── -->
+    <section id="view-exam" class="view hidden">
+      <div class="exam-layout">
+        <div class="exam-main">
+          <header class="exam-header">
+            <span id="exam-question-counter" class="exam-counter">Question 1 of 10</span>
+            <div class="exam-header-right">
+              <span id="sync-status" class="sync-status hidden"></span>
+              <div id="exam-timer" class="timer" title="Time remaining">
+                <span class="timer-label">Time left</span>
+                <span id="timer-display" class="timer-value">--:--</span>
+              </div>
+              <button id="btn-submit-exam" class="btn btn-primary btn-sm">Submit exam</button>
+            </div>
+          </header>
+
+          <article id="question-card" class="question">
+            <div id="question-text" class="question-text"></div>
+            <div id="options-list" class="options" role="radiogroup"></div>
+          </article>
+
+          <footer class="question-nav">
+            <button id="btn-prev-q" class="btn btn-secondary">Previous</button>
+            <button id="btn-flag-question" class="btn btn-quiet" title="Mark for review (F)"><span>Mark for review</span></button>
+            <button id="btn-next-q" class="btn btn-secondary">Next</button>
+          </footer>
+          <p class="kbd-hint"><kbd>1</kbd>–<kbd>4</kbd> choose · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>F</kbd> mark for review</p>
+
+          <section id="lookup-panel" class="assist lookup">
+            <button id="lookup-toggle" class="assist-head" aria-expanded="false" aria-controls="lookup-body">
+              <span class="assist-title">Look it up</span>
+              <span class="assist-sub">Search reference articles about this question's topic. Searches are recorded; the answer is hidden.</span>
+              <span id="lookup-count" class="assist-count"></span>
+            </button>
+            <div id="lookup-body" class="assist-body hidden">
+              <form id="lookup-form" class="assist-form" autocomplete="off">
+                <input id="lookup-input" class="input" type="search" maxlength="200" placeholder="e.g. binary search tree height">
+                <button class="btn btn-primary btn-sm" type="submit">Search</button>
+              </form>
+              <div id="lookup-results" class="lookup-results" aria-live="polite"></div>
+            </div>
+          </section>
+
+          <section id="assist-panel" class="assist">
+            <button id="assist-toggle" class="assist-head" aria-expanded="false" aria-controls="assist-body">
+              <span class="assist-title">Guided help</span>
+              <span class="assist-sub">Explains the ideas behind this question. It will not tell you the answer.</span>
+              <span id="assist-remaining" class="assist-count"></span>
+            </button>
+            <div id="assist-body" class="assist-body hidden">
+              <div id="assist-thread" class="assist-thread" aria-live="polite">
+                <p class="assist-empty">Ask about a term or idea in the question — for example, "what does balanced mean here?"</p>
+              </div>
+              <form id="assist-form" class="assist-form" autocomplete="off">
+                <input id="assist-input" class="input" type="text" maxlength="600" placeholder="Ask about a concept in this question">
+                <button class="btn btn-primary btn-sm" type="submit">Ask</button>
+              </form>
+            </div>
+          </section>
+        </div>
+
+        <aside class="exam-side">
+          <div class="camera-slot" aria-hidden="true"></div>
+          <div id="ai-proctor-live-status" class="proctor-status">
+            <span class="proctor-live-dot"></span>
+            <span id="proctor-live-text">Monitoring active</span>
+          </div>
+
+          <section class="side-section">
+            <div class="side-heading">
+              <h2>Questions</h2>
+              <span id="palette-progress" class="side-meta"></span>
+            </div>
+            <div id="palette-grid" class="palette-grid"></div>
+            <ul class="palette-legend">
+              <li><span class="legend-swatch answered"></span>Answered</li>
+              <li><span class="legend-swatch flagged"></span>Marked</li>
+              <li><span class="legend-swatch"></span>Unanswered</li>
+            </ul>
+          </section>
+
+          <section class="side-section">
+            <div class="side-heading">
+              <h2>Warnings</h2>
+              <span id="side-strikes" class="side-meta">0 of 3</span>
+            </div>
+            <div id="strike-track" class="strike-track"></div>
+            <p class="side-note">Other tabs are allowed but recorded. AI assistants are flagged.</p>
+          </section>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ── Results ──────────────────────────────────────────── -->
+    <section id="view-results" class="view hidden">
+      <div class="page-narrow">
+        <p class="eyebrow">Submitted</p>
+        <h1 class="page-title">Your answers have been recorded</h1>
+        <div id="results-score" class="results-score"></div>
+        <div id="results-breakdown"></div>
+        <div class="actions actions-start">
+          <button id="btn-view-audit" class="btn btn-secondary">View session record</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Session record ───────────────────────────────────── -->
+    <section id="view-audit" class="view hidden">
+      <div class="page-wide">
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Session record</p>
+            <h1 class="page-title">What was recorded during this attempt</h1>
+          </div>
+          <button id="btn-back-results" class="btn btn-quiet btn-sm">Back</button>
+        </div>
+        <div class="stat-row" id="audit-stats"></div>
+        <div class="audit-grid">
+          <section class="panel">
+            <h2 class="panel-title">Sites and searches</h2>
+            <div id="audit-searches"></div>
+          </section>
+          <section class="panel">
+            <h2 class="panel-title">Violations</h2>
+            <div id="audit-violations"></div>
+          </section>
+          <section class="panel panel-span">
+            <h2 class="panel-title">Timeline</h2>
+            <ol id="audit-timeline" class="timeline"></ol>
+          </section>
+          <section class="panel panel-span">
+            <h2 class="panel-title">Tab history</h2>
+            <div id="audit-tabs"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-guest-browser" class="view hidden"></section>
+
+    <!-- ── Terminated ───────────────────────────────────────── -->
+    <section id="view-disqualified" class="view hidden">
+      <div class="page-narrow">
+        <p class="eyebrow eyebrow-danger">Attempt ended</p>
+        <h1 class="page-title">This exam session was terminated</h1>
+        <p id="disqualify-reason" class="lede">The warning limit was reached.</p>
+        <p class="lede">Your answers so far are saved and the session has been sent to the proctor for review. If the proctor decides to let you continue, the exam will reopen here automatically — keep this window open.</p>
+        <div class="actions actions-start">
+          <button id="btn-dq-audit" class="btn btn-secondary">View session record</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Fixed (not inside a view) so the video keeps decoding while a guest tab covers the page -->
+  <div id="webcam-overlay" class="camera-panel hidden">
+    <video id="webcam-feed" autoplay playsinline muted></video>
+    <canvas id="webcam-canvas" class="camera-hud"></canvas>
+    <div id="webcam-status-ring" class="camera-ring"></div>
+    <div id="webcam-live-hud" class="camera-readout">
+      <span id="hud-face-status" class="readout">1 face</span>
+      <span id="hud-gaze-status" class="readout">On screen</span>
+    </div>
+  </div>
+
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h3 id="modal-title">Submit exam?</h3>
+      <p id="modal-body">You cannot change your answers after submitting.</p>
+      <div id="modal-summary" class="modal-summary"></div>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn btn-quiet">Keep working</button>
+        <button id="modal-confirm" class="btn btn-primary">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/face-api.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/authView.js"></script>
+  <script src="js/examView.js"></script>
+  <script src="js/auditView.js"></script>
+  <script src="js/tabsUI.js"></script>
+  <script src="js/guidedHelp.js"></script>
+  <script src="js/lookup.js"></script>
+  <script src="js/liveStream.js"></script>
+  <script src="js/proctorClient.js"></script>
+  <script src="js/inputTracker.js"></script>
+
+</body>
+</html>
