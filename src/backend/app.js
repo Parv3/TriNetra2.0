@@ -26,19 +26,31 @@ function createApp(options = {}) {
     return false;
   }
 
-  app.use(cors({
-    origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) {
-        return callback(null, true);
-      }
-      const err = new Error('CORS Not Allowed: Origin is untrusted');
-      err.status = 403;
-      err.code = 'CORS_NOT_ALLOWED';
-      return callback(err);
-    },
+  // A page served by this server calling its own API, e.g. the console on a cloud address
+  // like https://trinetra.onrender.com (the Host header is the public name behind a proxy)
+  function isSameOrigin(origin, req) {
+    try {
+      const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
+      return Boolean(host) && new URL(origin).host.toLowerCase() === host;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  const corsOptions = {
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Session-Token', 'X-Dev-Candidate'],
     credentials: true
+  };
+  app.use(cors((req, callback) => {
+    const origin = req.headers.origin;
+    if (isAllowedOrigin(origin) || isSameOrigin(origin, req)) {
+      return callback(null, { ...corsOptions, origin: true });
+    }
+    const err = new Error('CORS Not Allowed: Origin is untrusted');
+    err.status = 403;
+    err.code = 'CORS_NOT_ALLOWED';
+    return callback(err);
   }));
 
   // JSON Body Parser with 10MB limit (essential for base64 webcam photos)

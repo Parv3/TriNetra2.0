@@ -63,4 +63,12 @@ describe('Owner proctor setup', () => {
     const { status } = await call('POST', {}, owner);
     assert.strictEqual(status, 201);
   });
+
+  test("the console on a cloud address can call its own server; other sites can't", async () => {
+    const cloud = { 'X-Forwarded-For': '203.0.113.7', 'X-Forwarded-Host': 'trinetra-demo.onrender.com' };
+    const own = await call('GET', { ...cloud, Origin: 'https://trinetra-demo.onrender.com' });
+    assert.strictEqual(own.status, 200);
+    const foreign = await call('GET', { ...cloud, Origin: 'https://evil.example.com' });
+    assert.strictEqual(foreign.status, 403);
+  });
 });
