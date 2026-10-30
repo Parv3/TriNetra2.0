@@ -19,6 +19,27 @@ function passwordMatches(password, salt, hash) {
   return stored.length === candidate.length && crypto.timingSafeEqual(stored, candidate);
 }
 
+/**
+ * Turns Supabase's reasons for not sending a sign-in email into something a student (and the
+ * person running the exam) can act on.
+ */
+function explainEmailFailure(reason, status) {
+  const r = String(reason || '').toLowerCase();
+  if (status === 429 || r.includes('rate limit')) {
+    return 'Too many sign-in emails were sent recently, so the email service is pausing. Wait a while, or use the one-time code from your invigilator. (Organisers: add your own email sender in Supabase, Authentication → SMTP Settings.)';
+  }
+  if (r.includes('not authorized') || (r.includes('not allowed') && r.includes('address'))) {
+    return "This email address can't receive sign-in codes yet: Supabase's built-in sender only emails the project's own team members. Use the one-time code from your invigilator. (Organisers: add an email sender in Supabase, Authentication → SMTP Settings.)";
+  }
+  if (r.includes('signups not allowed') || r.includes('signup')) {
+    return 'New accounts are switched off for this exam. Ask your invigilator for a one-time code.';
+  }
+  if (r.includes('error sending') || r.includes('smtp')) {
+    return 'The email service could not send the code. Use the one-time code from your invigilator. (Organisers: check the email sender in Supabase, Authentication → SMTP Settings.)';
+  }
+  return null;
+}
+
 class AuthService {
   constructor(ds = datastore) {
     this.datastore = ds;
@@ -152,7 +173,12 @@ class AuthService {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      if (failure) throw Object.assign(new Error(failure.message), { status: failure.status || res.status, error: failure.code });
+      if (failure) {
+        const reason = data.msg || data.error_description || data.message || data.error || `HTTP ${res.status}`;
+        console.warn(`[Auth] Supabase ${pathname.split('?')[0]} failed (${res.status}): ${reason}`);
+        const message = typeof failure.explain === 'function' ? (failure.explain(reason, res.status) || failure.message) : failure.message;
+        throw Object.assign(new Error(message), { status: failure.status || res.status, error: failure.code, reason });
+      }
       const err = new Error('Your sign-in has expired. Sign in again.');
       err.status = 401;
       err.error = 'GOOGLE_SESSION_INVALID';
@@ -190,7 +216,12 @@ class AuthService {
     await this.supabaseAuth('/otp', {
       method: 'POST',
       body: JSON.stringify({ email, create_user: true }),
-      failure: { status: 502, code: 'EMAIL_NOT_SENT', message: 'The sign-in email could not be sent right now. Try again in a few minutes, or use the one-time code from your invigilator.' }
+      failure: {
+        status: 502,
+        code: 'EMAIL_NOT_SENT',
+        message: 'The sign-in email could not be sent right now. Try again in a few minutes, or use the one-time code from your invigilator.',
+        explain: explainEmailFailure
+      }
     });
     this.emailCooldown.set(email, Date.now());
     return { email };

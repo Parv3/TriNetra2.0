@@ -18,6 +18,9 @@ function fakeSupabase(calls) {
       return ok({ access_token: 'good-access', refresh_token: 'refresh-2', user });
     }
     if (url.endsWith('/auth/v1/settings')) return ok({ external: { email: true, google: false } });
+    if (url.endsWith('/auth/v1/otp') && JSON.parse(init.body).email === 'busy@gmail.com') {
+      return { ok: false, status: 429, json: async () => ({ code: 429, error_code: 'over_email_send_rate_limit', msg: 'email rate limit exceeded' }) };
+    }
     if (url.endsWith('/auth/v1/otp')) return ok({});
     if (url.endsWith('/auth/v1/verify') && JSON.parse(init.body).token === '123456') {
       return ok({ access_token: 'good-access', refresh_token: 'refresh-from-email', user });
@@ -140,5 +143,12 @@ describe('Account sign-in via Supabase (email code and Google)', () => {
     const { status, data } = await call('/api/auth/email/send', { email: 'not-an-email' });
     assert.strictEqual(status, 400);
     assert.strictEqual(data.code, 'INVALID_EMAIL');
+  });
+
+  test("explains Supabase's reason when the email can't be sent", async () => {
+    const { status, data } = await call('/api/auth/email/send', { email: 'busy@gmail.com' });
+    assert.strictEqual(status, 502);
+    assert.strictEqual(data.code, 'EMAIL_NOT_SENT');
+    assert.match(data.message, /Too many sign-in emails/);
   });
 });
