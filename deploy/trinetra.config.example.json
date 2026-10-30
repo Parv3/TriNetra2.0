@@ -1,3 +1,6 @@
 {
-  "serverUrl": "https://exams.your-college.edu"
+  "serverUrl": "",
+  "databaseUrl": "postgresql://postgres.YOUR-PROJECT-REF:YOUR-DB-PASSWORD@aws-0-YOUR-REGION.pooler.supabase.com:5432/postgres",
+  "supabaseUrl": "https://YOUR-PROJECT-REF.supabase.co",
+  "supabaseAnonKey": "sb_publishable_..."
 }

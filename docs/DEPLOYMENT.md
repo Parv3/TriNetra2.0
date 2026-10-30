@@ -71,6 +71,19 @@ You can also set `TRINETRA_SERVER_URL` instead of the file. Unsigned installers 
 
 ---
 
+## Cloud database and Google sign-in (Supabase)
+
+Any Supabase account works. To move Trinetra to a new account or project:
+
+1. **Create a project** at supabase.com (free plan is enough). Note the region.
+2. **Create the schema.** Open *SQL Editor → New query*, paste [`supabase/schema.sql`](../supabase/schema.sql) and run it. (Optional: the exam server also creates it on first connect.) Regenerate the file after schema changes with `npm run export-schema`.
+3. **Point the app at it.** Put a `trinetra.config.json` next to the installed app (or in `%APPDATA%\Trinetra Secure Browser`), based on `deploy/trinetra.config.example.json`:
+   - `databaseUrl` — *Project Settings → Database → Connection string → Session pooler* (contains the database password; keep this file private).
+   - `supabaseUrl`, `supabaseAnonKey` — *Project Settings → API*: the project URL and the **publishable** key. Never use the `service_role`/secret key.
+   To build these two into the installer instead, edit `"trinetra"` in `package.json` and run `npm run dist`.
+4. **Turn on Google sign-in.** In Google Cloud Console create an OAuth client (*Web application*) with the redirect URI `https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback`. Then in Supabase *Authentication → Sign In / Providers → Google*, enable it and paste the client ID and secret. Under *Authentication → URL Configuration*, add `http://localhost:3000/**` to the redirect URLs.
+5. **Teacher access** — see [TEACHER_SQL.md](TEACHER_SQL.md).
+
 ## Configuration reference
 
 | Variable | Default | Purpose |
@@ -79,7 +92,8 @@ You can also set `TRINETRA_SERVER_URL` instead of the file. Unsigned installers 
 | `HTTPS_PORT` | `PORT + 1000` | Self-signed HTTPS listener for LAN browser candidates |
 | `TRINETRA_DISABLE_HTTPS` | — | `1` turns the self-signed listener off (when a proxy provides TLS) |
 | `TRINETRA_DATA_DIR` | `./data` | Local data store and certificates |
-| `DATABASE_URL` | — | Enables the PostgreSQL mirror (`postgres://user:pass@host:5432/db`) |
+| `DATABASE_URL` | — | Enables the PostgreSQL mirror (`postgres://user:pass@host:5432/db`); `databaseUrl` in `trinetra.config.json` |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | `"trinetra"` in package.json | Supabase project for "Continue with Google"; `supabaseUrl` / `supabaseAnonKey` in `trinetra.config.json` |
 | `NODE_ENV` | `development` | `production` disables the demo master code and on-screen OTP |
 | `TRINETRA_SHOW_OTP` | — | `1` shows sign-in codes on the student's screen even in production |
 | `ANTHROPIC_API_KEY` | — | Enables the AI tutor in Guided help (otherwise proctor hints are used) |

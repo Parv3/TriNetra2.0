@@ -22,7 +22,8 @@
     "fetch-models": "node scripts/fetch-models.js",
     "dist": "electron-builder --win nsis",
     "dist:mac": "electron-builder --mac dmg",
-    "dist:linux": "electron-builder --linux AppImage"
+    "dist:linux": "electron-builder --linux AppImage",
+    "export-schema": "node scripts/export-schema.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
@@ -80,5 +81,9 @@
     "linux": {
       "category": "Education"
     }
+  },
+  "trinetra": {
+    "supabaseUrl": "https://yttybuitwhrscfeabjxz.supabase.co",
+    "supabaseAnonKey": "sb_publishable_piTcmmumQu7M8T5r5NNSOA_ZgcdT4_y"
   }
 }

@@ -33,10 +33,11 @@ function readAppConfig() {
 }
 
 const appConfig = readAppConfig();
-const BUNDLED_SUPABASE = { url: 'https://yttybuitwhrscfeabjxz.supabase.co', anonKey: 'sb_publishable_piTcmmumQu7M8T5r5NNSOA_ZgcdT4_y' };
+// The Supabase project built into the installer ("trinetra" in package.json); a config file overrides it
+const bundled = require('../../package.json').trinetra || {};
 if (!process.env.DATABASE_URL && appConfig.databaseUrl) process.env.DATABASE_URL = String(appConfig.databaseUrl);
-if (!process.env.SUPABASE_URL) process.env.SUPABASE_URL = String(appConfig.supabaseUrl || BUNDLED_SUPABASE.url);
-if (!process.env.SUPABASE_ANON_KEY) process.env.SUPABASE_ANON_KEY = String(appConfig.supabaseAnonKey || BUNDLED_SUPABASE.anonKey);
+if (!process.env.SUPABASE_URL) process.env.SUPABASE_URL = String(appConfig.supabaseUrl || bundled.supabaseUrl || '');
+if (!process.env.SUPABASE_ANON_KEY) process.env.SUPABASE_ANON_KEY = String(appConfig.supabaseAnonKey || bundled.supabaseAnonKey || '');
 
 const { startServer, stopServer } = require('../backend/server');
 const windowManager = require('./windowManager');
