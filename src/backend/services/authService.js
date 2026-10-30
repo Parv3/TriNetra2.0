@@ -131,7 +131,7 @@ class AuthService {
     };
   }
 
-  // --- Google sign-in (Supabase Auth) ---
+  // --- Account sign-in (Supabase Auth): Gmail code by email, or Google when it is set up ---
 
   googleEnabled() {
     return Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
@@ -139,24 +139,76 @@ class AuthService {
 
   async supabaseAuth(pathname, init = {}) {
     if (!this.googleEnabled()) {
-      const err = new Error('Google sign-in is not configured on this exam server');
+      const err = new Error('Account sign-in is not configured on this exam server');
       err.status = 503;
       err.error = 'GOOGLE_DISABLED';
       throw err;
     }
     const fetchFn = this.fetchFn || fetch;
+    const { failure, ...request } = init;
     const res = await fetchFn(`${config.SUPABASE_URL}/auth/v1${pathname}`, {
-      ...init,
-      headers: { apikey: config.SUPABASE_ANON_KEY, 'Content-Type': 'application/json', ...(init.headers || {}) }
+      ...request,
+      headers: { apikey: config.SUPABASE_ANON_KEY, 'Content-Type': 'application/json', ...(request.headers || {}) }
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const err = new Error('Your Google sign-in has expired. Sign in with Google again.');
+      if (failure) throw Object.assign(new Error(failure.message), { status: failure.status || res.status, error: failure.code });
+      const err = new Error('Your sign-in has expired. Sign in again.');
       err.status = 401;
       err.error = 'GOOGLE_SESSION_INVALID';
       throw err;
     }
     return data;
+  }
+
+  /** Which sign-in methods the Supabase project has switched on. */
+  async signInMethods() {
+    if (!this.googleEnabled()) return { email: false, google: false };
+    const now = Date.now();
+    if (this.methodsCache && now - this.methodsCache.at < 5 * 60 * 1000) return this.methodsCache.value;
+    let value = { email: true, google: false };
+    try {
+      const s = await this.supabaseAuth('/settings');
+      const ext = s.external || {};
+      value = { email: ext.email !== false, google: Boolean(ext.google) };
+    } catch (_) {}
+    this.methodsCache = { at: now, value };
+    return value;
+  }
+
+  /** Emails a one-time sign-in code to the address (Supabase creates the account on first use). */
+  async sendEmailCode(rawEmail) {
+    const email = String(rawEmail || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160) {
+      throw Object.assign(new Error('Enter a valid email address.'), { status: 400, error: 'INVALID_EMAIL' });
+    }
+    this.emailCooldown = this.emailCooldown || new Map();
+    const last = this.emailCooldown.get(email) || 0;
+    if (Date.now() - last < 60 * 1000) {
+      throw Object.assign(new Error('A code was just sent. Wait a minute before asking for another.'), { status: 429, error: 'CODE_RECENTLY_SENT' });
+    }
+    await this.supabaseAuth('/otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, create_user: true }),
+      failure: { status: 502, code: 'EMAIL_NOT_SENT', message: 'The sign-in email could not be sent right now. Try again in a few minutes, or use the one-time code from your invigilator.' }
+    });
+    this.emailCooldown.set(email, Date.now());
+    return { email };
+  }
+
+  /** Checks the emailed code and returns the user's Supabase tokens. */
+  async verifyEmailCode(rawEmail, rawCode) {
+    const email = String(rawEmail || '').trim().toLowerCase();
+    const token = String(rawCode || '').replace(/\s+/g, '');
+    if (!email || !/^\d{6,10}$/.test(token)) {
+      throw Object.assign(new Error('Enter the code from the email.'), { status: 400, error: 'INVALID_CODE' });
+    }
+    const data = await this.supabaseAuth('/verify', {
+      method: 'POST',
+      body: JSON.stringify({ type: 'email', email, token }),
+      failure: { status: 401, code: 'INVALID_CODE', message: 'That code is wrong or has expired. Check the latest email, or ask for a new code.' }
+    });
+    return { accessToken: data.access_token, refreshToken: data.refresh_token };
   }
 
   /**
@@ -174,13 +226,13 @@ class AuthService {
       user = data.user;
       nextRefresh = data.refresh_token || refreshToken;
     } else {
-      const err = new Error('Sign in with Google first');
+      const err = new Error('Sign in with your email first');
       err.status = 400;
       err.error = 'GOOGLE_TOKEN_REQUIRED';
       throw err;
     }
     if (!user || !user.email) {
-      const err = new Error('Google did not share an email address for this account');
+      const err = new Error('This account has no email address');
       err.status = 401;
       err.error = 'GOOGLE_NO_EMAIL';
       throw err;

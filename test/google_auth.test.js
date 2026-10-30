@@ -17,15 +17,27 @@ function fakeSupabase(calls) {
     if (url.includes('grant_type=refresh_token') && JSON.parse(init.body).refresh_token === 'refresh-1') {
       return ok({ access_token: 'good-access', refresh_token: 'refresh-2', user });
     }
+    if (url.endsWith('/auth/v1/settings')) return ok({ external: { email: true, google: false } });
+    if (url.endsWith('/auth/v1/otp')) return ok({});
+    if (url.endsWith('/auth/v1/verify') && JSON.parse(init.body).token === '123456') {
+      return ok({ access_token: 'good-access', refresh_token: 'refresh-from-email', user });
+    }
     return { ok: false, json: async () => ({ msg: 'invalid' }) };
   };
 }
 
-describe('Google sign-in via Supabase', () => {
+describe('Account sign-in via Supabase (email code and Google)', () => {
   let server;
   let baseUrl;
   const calls = [];
   const saved = {};
+
+  const call = async (path, body) => {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body)
+    });
+    return { status: res.status, data: await res.json() };
+  };
 
   const post = async (body) => {
     const res = await fetch(`${baseUrl}/api/auth/google/session`, {
@@ -98,5 +110,35 @@ describe('Google sign-in via Supabase', () => {
     assert.strictEqual(status, 401);
     assert.strictEqual(data.code, 'GOOGLE_SESSION_INVALID');
     assert.ok(calls.some(u => u === 'https://demo.supabase.co/auth/v1/user'));
+  });
+
+  test('reports which sign-in methods are switched on', async () => {
+    const { data } = await call('/api/auth/google/config');
+    assert.deepStrictEqual(data, { enabled: true, email: true, google: false });
+  });
+
+  test('emails a code, refuses a quick resend, and signs in with the right code', async () => {
+    const sent = await call('/api/auth/email/send', { email: 'Asha.Rao@gmail.com' });
+    assert.strictEqual(sent.status, 200);
+    assert.ok(calls.some(u => u.endsWith('/auth/v1/otp')));
+
+    const again = await call('/api/auth/email/send', { email: 'asha.rao@gmail.com' });
+    assert.strictEqual(again.status, 429);
+
+    const wrong = await call('/api/auth/email/verify', { email: 'asha.rao@gmail.com', code: '000000' });
+    assert.strictEqual(wrong.status, 401);
+    assert.strictEqual(wrong.data.code, 'INVALID_CODE');
+
+    const ok = await call('/api/auth/email/verify', { email: 'asha.rao@gmail.com', code: '123 456' });
+    assert.strictEqual(ok.status, 200);
+    assert.strictEqual(ok.data.google.email, 'asha.rao@gmail.com');
+    assert.strictEqual(ok.data.refreshToken, 'refresh-from-email');
+    assert.strictEqual(ok.data.token, undefined, 'verifying the email alone does not start an exam session');
+  });
+
+  test('rejects a malformed email address', async () => {
+    const { status, data } = await call('/api/auth/email/send', { email: 'not-an-email' });
+    assert.strictEqual(status, 400);
+    assert.strictEqual(data.code, 'INVALID_EMAIL');
   });
 });

@@ -74,9 +74,36 @@ function upsertProfile(req, res) {
 router.post('/profile', upsertProfile);
 router.post('/register-or-login', upsertProfile);
 
-// GET /api/auth/google/config — whether "Continue with Google" is available on this server
-router.get('/google/config', (req, res) => {
-  res.status(200).json({ enabled: authService.googleEnabled() });
+// GET /api/auth/google/config — whether account sign-in (Supabase) is available, and which methods
+router.get('/google/config', async (req, res) => {
+  const methods = await authService.signInMethods();
+  res.status(200).json({ enabled: authService.googleEnabled() && (methods.email || methods.google), ...methods });
+});
+
+const authError = (res, next, err) => {
+  if (err.status) return res.status(err.status).json({ error: true, statusCode: err.status, code: err.error, message: err.message });
+  next(err);
+};
+
+// POST /api/auth/email/send — emails a one-time sign-in code (Supabase Auth). Body: { email }
+router.post('/email/send', async (req, res, next) => {
+  try {
+    const { email } = await authService.sendEmailCode((req.body || {}).email);
+    res.status(200).json({ success: true, email });
+  } catch (err) { authError(res, next, err); }
+});
+
+// POST /api/auth/email/verify — checks the emailed code. Body: { email, code }. Returns the
+// signed-in account and a refresh token the app keeps so the student stays signed in.
+router.post('/email/verify', async (req, res, next) => {
+  try {
+    const datastore = require('../db/datastore');
+    const body = req.body || {};
+    const tokens = await authService.verifyEmailCode(body.email, body.code);
+    const { google, refreshToken } = await authService.resolveGoogleUser(tokens);
+    const linked = datastore.getCandidateByEmail(google.email);
+    res.status(200).json({ google, refreshToken: tokens.refreshToken || refreshToken, profile: linked ? publicProfile(linked) : null });
+  } catch (err) { authError(res, next, err); }
 });
 
 // POST /api/auth/google/session — signs a student in with their Google account instead of a
@@ -96,7 +123,7 @@ router.post('/google/session', async (req, res, next) => {
       return res.status(400).json({ error: true, code: 'INVALID_ROLL_NO', message: 'Enter a valid roll number.' });
     }
     if (linked && linked.id !== rollNo) {
-      return res.status(409).json({ error: true, code: 'EMAIL_LINKED_ELSEWHERE', message: `This Google account is linked to roll number ${linked.id}.` });
+      return res.status(409).json({ error: true, code: 'EMAIL_LINKED_ELSEWHERE', message: `This account is linked to roll number ${linked.id}.` });
     }
 
     let candidate = datastore.getCandidateById(rollNo);

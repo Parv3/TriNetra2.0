@@ -81,20 +81,85 @@
       const $ = (id) => document.getElementById(id);
       this.google = this.loadGoogle();
       $('btn-google')?.addEventListener('click', () => this.signInWithGoogle());
-      $('btn-google-out')?.addEventListener('click', () => this.saveGoogle(null));
+      $('btn-google-out')?.addEventListener('click', () => { this.saveGoogle(null); this.showEmailStep('address'); });
+      $('btn-email-send')?.addEventListener('click', () => this.sendEmailCode());
+      $('input-signin-email')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.sendEmailCode(); });
+      $('btn-email-verify')?.addEventListener('click', () => this.verifyEmailCode());
+      $('input-signin-code')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.verifyEmailCode(); });
+      $('btn-email-change')?.addEventListener('click', () => this.showEmailStep('address'));
       await this.refreshGoogleAvailability();
     },
 
-    /** Only offered in the desktop app, and only when the exam server can verify Google sign-ins. */
+    /**
+     * Offered when the exam server has a Supabase project: a code by email always, and the
+     * Google button too when Google is switched on there (desktop app only, it opens a window).
+     */
     async refreshGoogleAvailability() {
       const box = document.getElementById('google-account');
-      let enabled = false;
-      if (window.proctorAPI && typeof window.proctorAPI.googleSignIn === 'function') {
-        try { enabled = (await window.api.get('/api/auth/google/config')).enabled; } catch (_) {}
-      }
-      box?.classList.toggle('hidden', !enabled);
-      this.googleAvailable = enabled;
+      let cfg = {};
+      try { cfg = await window.api.get('/api/auth/google/config'); } catch (_) {}
+      const desktop = Boolean(window.proctorAPI && typeof window.proctorAPI.googleSignIn === 'function');
+      box?.classList.toggle('hidden', !cfg.enabled);
+      document.getElementById('btn-google')?.classList.toggle('hidden', !(cfg.google && desktop));
+      document.getElementById('email-step-address')?.classList.toggle('hidden', cfg.email === false);
+      this.googleAvailable = Boolean(cfg.enabled);
       this.renderGoogle();
+    },
+
+    showEmailStep(step) {
+      document.getElementById('email-step-address')?.classList.toggle('hidden', step !== 'address');
+      document.getElementById('email-step-code')?.classList.toggle('hidden', step !== 'code');
+      const hint = document.getElementById('email-hint');
+      if (hint) {
+        hint.textContent = step === 'code'
+          ? `We sent a code to ${this.pendingEmail}. It can take a minute, so check Spam too.`
+          : "Sign in with your Gmail once and stay signed in. Next time you won't need a code from the invigilator.";
+      }
+      document.getElementById(step === 'code' ? 'input-signin-code' : 'input-signin-email')?.focus();
+    },
+
+    async sendEmailCode() {
+      const errorEl = document.getElementById('auth-error-google');
+      const btn = document.getElementById('btn-email-send');
+      const email = document.getElementById('input-signin-email').value.trim().toLowerCase();
+      if (btn.disabled) return;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.showError(errorEl, 'Enter a valid email address.');
+      this.setBusy(btn, true, 'Sending…');
+      try {
+        await window.api.post('/api/auth/email/send', { email });
+        this.pendingEmail = email;
+        document.getElementById('input-signin-code').value = '';
+        errorEl?.classList.add('hidden');
+        this.showEmailStep('code');
+      } catch (err) {
+        this.showError(errorEl, err.message || 'Could not send the code.');
+      } finally {
+        this.setBusy(btn, false);
+      }
+    },
+
+    async verifyEmailCode() {
+      const errorEl = document.getElementById('auth-error-google');
+      const btn = document.getElementById('btn-email-verify');
+      const code = document.getElementById('input-signin-code').value.replace(/\s+/g, '');
+      if (btn.disabled) return;
+      if (!/^\d{6,10}$/.test(code)) return this.showError(errorEl, 'Enter the code from the email.');
+      this.setBusy(btn, true, 'Checking…');
+      try {
+        const res = await window.api.post('/api/auth/email/verify', { email: this.pendingEmail, code });
+        errorEl?.classList.add('hidden');
+        this.saveGoogle({
+          ...res.google,
+          refreshToken: res.refreshToken,
+          rollNo: res.profile ? res.profile.rollNo : '',
+          profileName: res.profile ? res.profile.name : ''
+        });
+        this.showEmailStep('address');
+      } catch (err) {
+        this.showError(errorEl, err.message || 'That code is not valid.');
+      } finally {
+        this.setBusy(btn, false);
+      }
     },
 
     renderGoogle() {
@@ -103,7 +168,7 @@
       $('google-signed-out')?.classList.toggle('hidden', Boolean(g));
       $('google-signed-in')?.classList.toggle('hidden', !g);
       if (!g) return;
-      $('google-name').textContent = g.name || 'Google account';
+      $('google-name').textContent = g.name || g.profileName || 'Signed in';
       $('google-email').textContent = g.email;
       const avatar = $('google-avatar');
       if (g.avatarUrl) { avatar.src = g.avatarUrl; avatar.classList.remove('hidden'); } else avatar.classList.add('hidden');

@@ -577,3 +577,7 @@ body.web-mode #tab-strip-area, body.web-mode #omnibox-bar, body.web-mode .titleb
 /* During an attempt the window cannot be minimised or resized */
 body.locked #btn-minimize, body.locked #btn-maximize { display: none; }
 @media (max-width: 1180px) { #status-network .status-text, #status-camera .status-text { display: none; } }
+#google-signed-out .google-row .input { flex: 1; min-width: 200px; }
+#google-signed-out .field-hint { margin: 8px 0 0; }
+#google-signed-out .btn-google { margin-top: 10px; }
+#google-signed-out .btn-google.hidden { display: none; }

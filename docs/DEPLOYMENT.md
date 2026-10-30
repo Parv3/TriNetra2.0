@@ -81,8 +81,15 @@ Any Supabase account works. To move Trinetra to a new account or project:
    - `databaseUrl` — *Project Settings → Database → Connection string → Session pooler* (contains the database password; keep this file private).
    - `supabaseUrl`, `supabaseAnonKey` — *Project Settings → API*: the project URL and the **publishable** key. Never use the `service_role`/secret key.
    To build these two into the installer instead, edit `"trinetra"` in `package.json` and run `npm run dist`.
-4. **Turn on Google sign-in.** In Google Cloud Console create an OAuth client (*Web application*) with the redirect URI `https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback`. Then in Supabase *Authentication → Sign In / Providers → Google*, enable it and paste the client ID and secret. Under *Authentication → URL Configuration*, add `http://localhost:3000/**` to the redirect URLs.
-5. **Teacher access** — see [TEACHER_SQL.md](TEACHER_SQL.md).
+4. **Student sign-in by email code (Gmail).** Students type their email, get a code, and stay signed in afterwards.
+   - *Authentication → Sign In / Providers → Email*: enabled (it is by default). Keep "Confirm email" on.
+   - *Authentication → Emails → Templates → Magic Link*: put the code in the email, for example
+     `<h2>Your Trinetra sign-in code</h2><p>Enter this code in the exam browser: <strong>{{ .Token }}</strong></p><p>It expires in 1 hour. If you didn't ask for it, ignore this email.</p>`
+     Do the same in the *Confirm signup* template, which is what first-time students receive.
+   - *Authentication → SMTP Settings*: Supabase's built-in sender only allows a few emails per hour, enough for testing only. For a class, add your own sender, e.g. Resend (free, 3,000/month) or Gmail (`smtp.gmail.com`, port 587, an app password from a Google account with 2-step verification).
+   - Optional, *Authentication → Rate Limits*: raise "emails sent per hour" once custom SMTP is on.
+5. **Optional: Google button.** When a Google provider is switched on (*Sign In / Providers → Google*, needs an OAuth client from Google Cloud with redirect `https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback`, plus `http://localhost:3000/**` under *URL Configuration*), a "Continue with Google" button appears next to the email sign-in. Nothing to change in the app.
+6. **Teacher access** — see [TEACHER_SQL.md](TEACHER_SQL.md).
 
 ## Configuration reference
 
