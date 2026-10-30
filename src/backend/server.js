@@ -169,10 +169,16 @@ async function stopServer() {
       await datastore.mirror.close().catch(() => {});
       datastore.mirror = null;
     }
-    await new Promise((resolve) => activeServer.close(resolve));
+    // close() waits for every open connection to end, and browsers (the proctor console,
+    // candidates' live video) keep theirs open, so drop them or shutdown never finishes.
+    const closeServer = (server) => new Promise((resolve) => {
+      server.close(resolve);
+      if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+    });
+    await closeServer(activeServer);
     activeServer = null;
     if (activeHttpsServer) {
-      await new Promise((resolve) => activeHttpsServer.close(resolve));
+      await closeServer(activeHttpsServer);
       activeHttpsServer = null;
     }
   }

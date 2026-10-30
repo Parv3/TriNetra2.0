@@ -154,7 +154,8 @@ class WebSocketService {
   attach(server) {
     if (!server || !this.wss) return;
     server.on('upgrade', (req, socket, head) => {
-      if (new URL(req.url, 'http://localhost').pathname !== '/ws/proctor') {
+      // After close() (the app is shutting down) a reconnecting browser is turned away
+      if (!this.wss || new URL(req.url, 'http://localhost').pathname !== '/ws/proctor') {
         socket.destroy();
         return;
       }
@@ -384,6 +385,10 @@ class WebSocketService {
 
   close() {
     if (this.wss) {
+      // close() leaves connected clients open, and their sockets keep the HTTP server alive
+      for (const client of this.wss.clients) {
+        try { client.terminate(); } catch (_) {}
+      }
       this.wss.close();
       this.wss = null;
     }

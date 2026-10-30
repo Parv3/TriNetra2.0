@@ -217,7 +217,10 @@ if (!gotSingleInstanceLock && !isSmokeTest) {
   });
 
   app.on('window-all-closed', async () => {
+    // Never let a stuck shutdown step leave the app running with no window
+    const forceExit = setTimeout(() => app.exit(0), 5000);
     await gracefulShutdown();
+    clearTimeout(forceExit);
     app.quit();
   });
 
