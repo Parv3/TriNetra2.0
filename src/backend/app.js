@@ -119,7 +119,8 @@ function createApp(options = {}) {
   // PostgreSQL mirror status (shown in the proctor console)
   app.get('/api/system/database', (req, res) => {
     const mirror = require('./db/postgresMirror');
-    res.status(200).json({ ...mirror.status, configured: Boolean(config.DATABASE_URL) });
+    const { enabled, lastSavedAt, lastError } = require('./db/cloudState').status;
+    res.status(200).json({ ...mirror.status, configured: Boolean(config.DATABASE_URL), stateStore: { enabled, lastSavedAt, lastError } });
   });
 
   // System Network Info endpoint (provides LAN IP and remote proctor URLs)

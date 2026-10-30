@@ -263,9 +263,23 @@ router.post('/face/verify', (req, res, next) => {
 
 const { requireProctor, requireOwnerProctor } = require('../middleware/authMiddleware');
 
+// A request through a reverse proxy (cloud hosts, Caddy, nginx) reaches us from the proxy's own
+// address, which can be 127.0.0.1, so anything carrying forwarding headers is never "this computer".
 const isLoopback = (req) => {
+  const h = req.headers || {};
+  if (h['x-forwarded-for'] || h['forwarded'] || h['x-real-ip']) return false;
   const ip = String(req.socket && req.socket.remoteAddress || '');
   return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+};
+
+// Cloud servers have no "computer running the server" to set up from: the host sets
+// TRINETRA_SETUP_KEY, and whoever has it can create the owner account remotely, once.
+const setupKeyMatches = (key) => {
+  const expected = process.env.TRINETRA_SETUP_KEY || '';
+  if (!expected || typeof key !== 'string') return false;
+  const a = Buffer.from(key.trim());
+  const b = Buffer.from(expected);
+  return a.length === b.length && require('crypto').timingSafeEqual(a, b);
 };
 const sendError = (res, next, err) => (err.status
   ? res.status(err.status).json({ error: true, code: err.error, message: err.message })
@@ -273,18 +287,26 @@ const sendError = (res, next, err) => (err.status
 
 // GET /api/auth/proctor/setup — does this server still need its first proctor account?
 router.get('/proctor/setup', (req, res) => {
-  res.status(200).json({ needsSetup: authService.needsProctorSetup(), fromThisComputer: isLoopback(req) });
+  const fromThisComputer = isLoopback(req);
+  res.status(200).json({
+    needsSetup: authService.needsProctorSetup(),
+    fromThisComputer,
+    setupKeyRequired: !fromThisComputer && Boolean(process.env.TRINETRA_SETUP_KEY)
+  });
 });
 
 // POST /api/auth/proctor/setup — create the owner proctor. Only once, and only from the
-// computer running the server, so nobody on the network can claim the exam server first.
+// computer running the server (or with the host's setup key), so nobody on the network can
+// claim the exam server first.
 router.post('/proctor/setup', (req, res, next) => {
   try {
     if (!authService.needsProctorSetup()) {
       return res.status(409).json({ error: true, code: 'ALREADY_SET_UP', message: 'A proctor account already exists. Sign in instead.' });
     }
-    if (!isLoopback(req)) {
-      return res.status(403).json({ error: true, code: 'SETUP_LOCAL_ONLY', message: 'The first proctor account must be created on the computer running the exam server.' });
+    if (!isLoopback(req) && !setupKeyMatches((req.body || {}).setupKey)) {
+      return process.env.TRINETRA_SETUP_KEY
+        ? res.status(403).json({ error: true, code: 'BAD_SETUP_KEY', message: 'That setup key is not right. Find it in the server settings (TRINETRA_SETUP_KEY).' })
+        : res.status(403).json({ error: true, code: 'SETUP_LOCAL_ONLY', message: 'The first proctor account must be created on the computer running the exam server.' });
     }
     const { name, email, password } = req.body || {};
     if (!password) return res.status(400).json({ error: true, code: 'WEAK_PASSWORD', message: 'Choose a password of at least 8 characters.' });

@@ -71,6 +71,31 @@ You can also set `TRINETRA_SERVER_URL` instead of the file. Unsigned installers 
 
 ---
 
+## Option C — Free online server on Render
+
+A public `https://` address for the exam server, the student web app and the proctor console, free and without a card. The repository includes a Render Blueprint (`render.yaml`).
+
+**Free plan trade-offs:** the server sleeps after 15 minutes without visitors, and the first visit after that takes about a minute. There is no disk, so the server keeps its data in your Supabase database (`TRINETRA_STATE_IN_DB=1`) and loads it back whenever it starts.
+
+1. **Supabase first.** You need the Session pooler connection string (Supabase → **Connect** → **Session pooler**, with your database password filled in). See *Cloud database* below.
+2. **Push the repository to GitHub**, including `render.yaml`.
+3. On **render.com**, sign up with GitHub, then **New → Blueprint** and pick the repository. Render reads `render.yaml` and asks for:
+   - `DATABASE_URL`: the Session pooler connection string.
+   - `ANTHROPIC_API_KEY`: optional, for real AI explanations in Guided help. Leave empty to use the built-in hints.
+4. Click **Apply**. The first build takes 5–10 minutes. Your address appears at the top, like `https://trinetra-xxxx.onrender.com`.
+5. **Create the owner proctor account.** Open `https://<your-address>/admin`. It asks for a **setup key**: in Render, open the service → **Environment** and copy `TRINETRA_SETUP_KEY`. Enter it with your name and password, and note the Proctor ID it shows.
+6. **Check it:** `https://<your-address>/api/system/database` should show `"stateStore":{"enabled":true,…}`.
+
+**How people use it**
+- **Proctor:** `https://<your-address>/admin`.
+- **Students in the desktop app:** next to "Exam hosted on", click **Change** and enter `https://<your-address>`.
+- **Students in a browser** (no lockdown, camera proctoring still on): `https://<your-address>/`.
+- **Download page:** `https://<your-address>/download` links to the installer on GitHub Releases (see below).
+
+**Publish the installer on GitHub Releases** so the download page works: on GitHub, open **Releases → Draft a new release**, create the tag `v1.0.0`, attach `release/Trinetra Secure Browser Setup 1.0.0.exe`, and publish.
+
+**Before real exams:** remove `TRINETRA_SHOW_OTP` in Render's Environment tab, so one-time codes go to the proctor console instead of the student's screen. Live video between laptops on different networks uses a public STUN server; strict campus networks may also need a TURN relay.
+
 ## Cloud database and Google sign-in (Supabase)
 
 Any Supabase account works. To move Trinetra to a new account or project:
@@ -100,6 +125,10 @@ Any Supabase account works. To move Trinetra to a new account or project:
 | `TRINETRA_DISABLE_HTTPS` | — | `1` turns the self-signed listener off (when a proxy provides TLS) |
 | `TRINETRA_DATA_DIR` | `./data` | Local data store and certificates |
 | `DATABASE_URL` | — | Enables the PostgreSQL mirror (`postgres://user:pass@host:5432/db`); `databaseUrl` in `trinetra.config.json` |
+| `TRINETRA_STATE_IN_DB` | off | `1` keeps the server's data in PostgreSQL (`DATABASE_URL`) instead of a file; for hosts without a disk |
+| `TRINETRA_SETUP_KEY` | — | Lets the first proctor account be created remotely with this key (cloud servers) |
+| `TRINETRA_SHOW_OTP` | off | `1` shows students their own one-time code on screen in production (demos) |
+| `JWT_SECRET` | per install | Token signing secret; set it on cloud hosts so sign-ins survive restarts |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | `"trinetra"` in package.json | Supabase project for "Continue with Google"; `supabaseUrl` / `supabaseAnonKey` in `trinetra.config.json` |
 | `NODE_ENV` | `development` | `production` disables the demo master code and on-screen OTP |
 | `TRINETRA_SHOW_OTP` | — | `1` shows sign-in codes on the student's screen even in production |

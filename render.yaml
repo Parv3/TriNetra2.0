@@ -1,0 +1,39 @@
+# Render Blueprint for the Trinetra exam server (backend API, student web app, proctor console).
+# Render → New → Blueprint → pick this repository. See docs/DEPLOYMENT.md, "Render (free)".
+#
+# The free plan has no disk, so the server keeps its state in Supabase (TRINETRA_STATE_IN_DB)
+# and sleeps after 15 minutes without traffic; the first visit after that takes about a minute.
+services:
+  - type: web
+    name: trinetra
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Supabase Session pooler connection string (Connect → Session pooler), with the password
+      - key: DATABASE_URL
+        sync: false
+      - key: TRINETRA_STATE_IN_DB
+        value: "1"
+      # Lets you create the first proctor account from the browser. Copy it from Render's
+      # Environment tab when the console asks for it.
+      - key: TRINETRA_SETUP_KEY
+        generateValue: true
+      # Stable token signing across restarts, so nobody is signed out when the server wakes up
+      - key: JWT_SECRET
+        generateValue: true
+      # Demo: students see their own one-time code. Remove for real exams (codes then go to the console).
+      - key: TRINETRA_SHOW_OTP
+        value: "1"
+      - key: ALLOW_MASTER_OTP
+        value: "false"
+      - key: SUPABASE_URL
+        value: https://lstbzjmyixdatpfoifnu.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: sb_publishable_dn1Iiek_6VySyzEkK3OZzQ_2H7zGvVn
+      # Optional: real AI explanations in Guided help
+      - key: ANTHROPIC_API_KEY
+        sync: false

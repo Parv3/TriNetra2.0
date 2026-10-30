@@ -73,7 +73,9 @@
 
       let setup = { needsSetup: false };
       try { setup = await (await fetch(`${this.baseUrl}/api/auth/proctor/setup`)).json(); } catch (_) {}
-      show(setup.needsSetup ? (setup.fromThisComputer ? 'proctor-setup-form' : 'proctor-setup-remote') : 'proctor-login-form');
+      const canSetUp = setup.fromThisComputer || setup.setupKeyRequired;
+      show(setup.needsSetup ? (canSetUp ? 'proctor-setup-form' : 'proctor-setup-remote') : 'proctor-login-form');
+      document.getElementById('setup-key-field')?.classList.toggle('hidden', !setup.setupKeyRequired);
       document.querySelector('#proctor-auth form:not(.hidden) input')?.focus();
 
       return new Promise((resolve) => {
@@ -102,7 +104,12 @@
           try {
             const res = await fetch(`${this.baseUrl}/api/auth/proctor/setup`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: document.getElementById('setup-name').value, email: document.getElementById('setup-email').value, password })
+              body: JSON.stringify({
+                name: document.getElementById('setup-name').value,
+                email: document.getElementById('setup-email').value,
+                password,
+                setupKey: document.getElementById('setup-key').value
+              })
             });
             const data = await res.json();
             if (!res.ok) return fail('setup-error', data.message || 'Setup failed.');

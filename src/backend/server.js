@@ -42,6 +42,26 @@ async function startServer(options = {}) {
 
   // Initialize DataStore & Seed Initial Records
   await datastore.init({ inMemoryOnly, filePath: options.dbPath });
+
+  // Hosts without a persistent disk keep the state in PostgreSQL (db/cloudState.js).
+  // If it can't be loaded, saving stays off so an empty start never overwrites saved exams.
+  const stateDbUrl = options.stateDatabaseUrl !== undefined
+    ? options.stateDatabaseUrl
+    : (process.env.TRINETRA_STATE_IN_DB === '1' ? config.DATABASE_URL : '');
+  if (stateDbUrl) {
+    const cloudState = require('./db/cloudState');
+    try {
+      await cloudState.init(stateDbUrl);
+      const saved = await cloudState.load();
+      if (saved) datastore.data = { ...datastore._createEmptyState(), ...saved };
+      datastore.cloudState = cloudState;
+      console.log(`[Backend] State stored in PostgreSQL (${saved ? 'restored saved state' : 'nothing saved yet'})`);
+    } catch (err) {
+      cloudState.status.lastError = err.message;
+      console.error('[Backend] Could not load state from PostgreSQL; running without saving:', err.message);
+    }
+  }
+
   await seedInitialData(datastore);
 
   // Mirror student activity into PostgreSQL when DATABASE_URL is set.
@@ -165,6 +185,10 @@ async function stopServer() {
     } catch (_) {}
 
     await datastore.flush();
+    if (datastore.cloudState) {
+      await datastore.cloudState.close();
+      datastore.cloudState = null;
+    }
     if (datastore.mirror) {
       await datastore.mirror.close().catch(() => {});
       datastore.mirror = null;

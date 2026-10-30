@@ -467,6 +467,9 @@ class AuthService {
       process.env.ALLOW_MASTER_OTP === 'true' ||
       (config.ENV === 'development' && process.env.NODE_ENV !== 'production')
     );
+    // TRINETRA_SHOW_OTP=1 (demo servers) shows the student their own code without enabling
+    // the shared master code, which would let anyone sign in as any student.
+    const showOnScreen = isMasterAllowed || process.env.TRINETRA_SHOW_OTP === '1';
 
     return {
       success: true,
@@ -474,9 +477,9 @@ class AuthService {
       expiresIn: Math.floor(this.OTP_TTL_MS / 1000),
       expiresInSeconds: Math.floor(this.OTP_TTL_MS / 1000),
       message: 'OTP dispatched successfully',
-      otp: isMasterAllowed ? otp : undefined,
-      devOtp: isMasterAllowed ? otp : undefined,
-      debugOtp: isMasterAllowed ? otp : undefined,
+      otp: showOnScreen ? otp : undefined,
+      devOtp: showOnScreen ? otp : undefined,
+      debugOtp: showOnScreen ? otp : undefined,
       maskedDestination: candidate.email
         ? candidate.email.replace(/^(.{2})(.*)(@.*)$/, (_, a, b, c) => a + '*'.repeat(Math.max(1, b.length)) + c)
         : 'phone ending in ***'

@@ -34,6 +34,10 @@
       <form id="proctor-setup-form" class="auth-form hidden" autocomplete="off">
         <h1>Set up the exam server</h1>
         <p class="text-muted">Create the owner proctor account. You'll get a Proctor ID to sign in with, and you can add other proctors afterwards.</p>
+        <div id="setup-key-field" class="hidden">
+          <label class="field-label" for="setup-key">Setup key</label>
+          <input id="setup-key" class="input input-mono" autocomplete="off" spellcheck="false" placeholder="From the server's TRINETRA_SETUP_KEY setting">
+        </div>
         <label class="field-label" for="setup-name">Your name</label>
         <input id="setup-name" class="input" required>
         <label class="field-label" for="setup-email">Email</label>

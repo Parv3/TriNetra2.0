@@ -209,8 +209,9 @@ Settings come from environment variables, or from a `trinetra.config.json` next 
 | `supabaseUrl`, `supabaseAnonKey` | Supabase project for email and Google sign-in (defaults in `"trinetra"` in `package.json`) |
 | `ANTHROPIC_API_KEY` | Enables Claude for Guided help |
 | `PORT`, `MAX_STRIKES`, `ENFORCE_AUTH` | Server port, default warnings, strict auth outside production |
+| `TRINETRA_STATE_IN_DB`, `TRINETRA_SETUP_KEY`, `TRINETRA_SHOW_OTP` | Cloud server: data in PostgreSQL, remote owner setup, codes on screen for demos |
 
-Full setup, including Supabase, email sign-in and the Docker server: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. Teacher SQL access: **[docs/TEACHER_SQL.md](docs/TEACHER_SQL.md)**.
+**Online server:** deploy free on Render with the included `render.yaml`. Full setup, including Supabase, email sign-in and the Docker server: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. Teacher SQL access: **[docs/TEACHER_SQL.md](docs/TEACHER_SQL.md)**.
 
 ---
 

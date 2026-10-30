@@ -138,6 +138,7 @@ class DataStore {
   _triggerPersistence() {
     // Optional PostgreSQL mirror for teachers (see db/postgresMirror.js); debounced internally.
     if (this.mirror) this.mirror.schedule(this.data);
+    if (this.cloudState) this.cloudState.schedule(this.data);
     if (!this.inMemoryOnly) {
       // Coalesce bursts of telemetry into one write per second. Serialising the whole store
       // on every event blocked the event loop and made live proctoring stutter.
