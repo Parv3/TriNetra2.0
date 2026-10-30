@@ -53,8 +53,8 @@ class WebSocketService {
         if (session && session.role === 'proctor') {
           role = 'proctor';
         } else if (requestedRole === 'proctor') {
-          // Reject unauthenticated proctor connections if auth is enforced
-          if (config.ENFORCE_AUTH) {
+          // Only the automated test suite may open an unauthenticated proctor channel.
+          if (config.ENFORCE_AUTH || config.ENV !== 'test') {
             ws.close(4401, 'Unauthorized: Valid proctor JWT token required');
             return;
           }

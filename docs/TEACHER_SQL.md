@@ -19,10 +19,10 @@ Run once as the database owner:
 
 ```sql
 CREATE ROLE teacher LOGIN PASSWORD 'choose-a-password';
-GRANT USAGE ON SCHEMA trinetra TO teacher;
-GRANT SELECT ON ALL TABLES IN SCHEMA trinetra TO teacher;
-ALTER DEFAULT PRIVILEGES IN SCHEMA trinetra GRANT SELECT ON TABLES TO teacher;
+GRANT trinetra_reader TO teacher;
 ```
+
+`trinetra_reader` is created by the app on startup. It can read every table and view in the `trinetra` schema and change nothing. Row-level security is on, so the tables are not readable through Supabase's public REST API.
 
 Teachers connect with host, port `5432`, database `trinetra`, user `teacher`. They can read everything and change nothing.
 

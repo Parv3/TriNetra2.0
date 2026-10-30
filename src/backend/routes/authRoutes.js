@@ -74,6 +74,58 @@ function upsertProfile(req, res) {
 router.post('/profile', upsertProfile);
 router.post('/register-or-login', upsertProfile);
 
+// GET /api/auth/google/config — whether "Continue with Google" is available on this server
+router.get('/google/config', (req, res) => {
+  res.status(200).json({ enabled: authService.googleEnabled() });
+});
+
+// POST /api/auth/google/session — signs a student in with their Google account instead of a
+// one-time code. Body: { accessToken | refreshToken, rollNo?, name? }. Without a roll number it
+// only reports who is signed in and which profile (if any) that Gmail is linked to.
+router.post('/google/session', async (req, res, next) => {
+  try {
+    const datastore = require('../db/datastore');
+    const body = req.body || {};
+    const { google, refreshToken } = await authService.resolveGoogleUser(body);
+    const linked = datastore.getCandidateByEmail(google.email);
+    const rollNo = cleanRoll(body.rollNo);
+    if (!rollNo) {
+      return res.status(200).json({ google, refreshToken, profile: linked ? publicProfile(linked) : null });
+    }
+    if (/[<>{}]/.test(rollNo)) {
+      return res.status(400).json({ error: true, code: 'INVALID_ROLL_NO', message: 'Enter a valid roll number.' });
+    }
+    if (linked && linked.id !== rollNo) {
+      return res.status(409).json({ error: true, code: 'EMAIL_LINKED_ELSEWHERE', message: `This Google account is linked to roll number ${linked.id}.` });
+    }
+
+    let candidate = datastore.getCandidateById(rollNo);
+    const name = String(body.name || google.name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    if (candidate) {
+      const ownEmail = String(candidate.email || '').toLowerCase();
+      if (ownEmail !== google.email) {
+        // Only an unclaimed profile (no real email yet) with the same name can be linked to this Gmail
+        const unclaimed = !ownEmail || ownEmail.endsWith('@candidate.local');
+        if (!unclaimed || !sameName(candidate.name, name)) {
+          return res.status(409).json({ error: true, code: 'ROLL_NO_TAKEN', message: 'This roll number belongs to a different account. Check it, or ask your proctor.' });
+        }
+        candidate = datastore.updateCandidate(rollNo, { email: google.email, googleLinkedAt: Date.now() });
+      }
+    } else {
+      if (!name) return res.status(400).json({ error: true, code: 'NAME_REQUIRED', message: 'Enter your full name.' });
+      candidate = datastore.addCandidate({
+        id: rollNo, rollNo, name, email: google.email, institution: '',
+        faceRegistered: false, googleLinkedAt: Date.now(), createdAt: Date.now()
+      });
+    }
+    const session = authService.issueCandidateSession(candidate, 'GOOGLE');
+    return res.status(200).json({ ...session, google, refreshToken, profile: publicProfile(candidate) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: true, statusCode: err.status, code: err.error, message: err.message });
+    next(err);
+  }
+});
+
 // POST /api/auth/otp/request
 router.post('/otp/request', (req, res, next) => {
   try {
@@ -182,11 +234,78 @@ router.post('/face/verify', (req, res, next) => {
   }
 });
 
+const { requireProctor, requireOwnerProctor } = require('../middleware/authMiddleware');
+
+const isLoopback = (req) => {
+  const ip = String(req.socket && req.socket.remoteAddress || '');
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+};
+const sendError = (res, next, err) => (err.status
+  ? res.status(err.status).json({ error: true, code: err.error, message: err.message })
+  : next(err));
+
+// GET /api/auth/proctor/setup — does this server still need its first proctor account?
+router.get('/proctor/setup', (req, res) => {
+  res.status(200).json({ needsSetup: authService.needsProctorSetup(), fromThisComputer: isLoopback(req) });
+});
+
+// POST /api/auth/proctor/setup — create the owner proctor. Only once, and only from the
+// computer running the server, so nobody on the network can claim the exam server first.
+router.post('/proctor/setup', (req, res, next) => {
+  try {
+    if (!authService.needsProctorSetup()) {
+      return res.status(409).json({ error: true, code: 'ALREADY_SET_UP', message: 'A proctor account already exists. Sign in instead.' });
+    }
+    if (!isLoopback(req)) {
+      return res.status(403).json({ error: true, code: 'SETUP_LOCAL_ONLY', message: 'The first proctor account must be created on the computer running the exam server.' });
+    }
+    const { name, email, password } = req.body || {};
+    if (!password) return res.status(400).json({ error: true, code: 'WEAK_PASSWORD', message: 'Choose a password of at least 8 characters.' });
+    const created = authService.createProctor({ name, email, password, isOwner: true });
+    const datastore = require('../db/datastore');
+    return res.status(201).json({ ...authService.issueProctorToken(datastore.getProctor(created.id)), proctorId: created.id });
+  } catch (err) { return sendError(res, next, err); }
+});
+
+// GET /api/auth/proctors — list proctor accounts
+router.get('/proctors', requireProctor, (req, res) => {
+  const datastore = require('../db/datastore');
+  res.status(200).json(datastore.listProctors().map(p => authService.publicProctor(p)).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)));
+});
+
+// POST /api/auth/proctors — the owner adds a proctor; the generated password is shown once
+router.post('/proctors', requireOwnerProctor, (req, res, next) => {
+  try {
+    const { name, email } = req.body || {};
+    const created = authService.createProctor({ name, email, createdBy: req.user && req.user.proctorId });
+    return res.status(201).json(created);
+  } catch (err) { return sendError(res, next, err); }
+});
+
+// PATCH /api/auth/proctors/:id — enable/disable an account (owner only; the owner can't disable itself)
+router.patch('/proctors/:id', requireOwnerProctor, (req, res) => {
+  const datastore = require('../db/datastore');
+  const target = datastore.getProctor(req.params.id);
+  if (!target) return res.status(404).json({ error: true, message: 'Proctor not found' });
+  if (target.isOwner) return res.status(400).json({ error: true, message: 'The owner account cannot be disabled.' });
+  const updated = datastore.saveProctor({ id: target.id, disabled: Boolean(req.body && req.body.disabled) });
+  return res.status(200).json(authService.publicProctor(updated));
+});
+
+// POST /api/auth/proctor/password — change your own password
+router.post('/proctor/password', requireProctor, (req, res, next) => {
+  try {
+    if (!req.user || !req.user.proctorId) return res.status(400).json({ error: true, message: 'This login has no proctor account.' });
+    const { currentPassword, newPassword } = req.body || {};
+    return res.status(200).json(authService.changeProctorPassword(req.user.proctorId, currentPassword, newPassword));
+  } catch (err) { return sendError(res, next, err); }
+});
+
 // POST /api/auth/proctor/login
 router.post('/proctor/login', (req, res, next) => {
   try {
-    const { username, password } = req.body || {};
-    const result = authService.loginProctor(username, password);
+    const { username, proctorId, password } = req.body || {};
+    const result = authService.loginProctor(String(proctorId || username || '').trim(), password);
     return res.status(200).json(result);
   } catch (err) {
     if (err.status) {

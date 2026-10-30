@@ -11,6 +11,55 @@
 </head>
 <body>
 
+  <!-- Proctor sign-in (and first-run owner setup). Nothing below loads until this succeeds. -->
+  <div id="proctor-auth" class="auth-screen">
+    <div class="auth-card">
+      <div class="brand auth-brand">
+        <svg width="22" height="22" viewBox="0 0 18 18" aria-hidden="true"><path d="M1.5 9c2-3.6 4.5-5.4 7.5-5.4S14.5 5.4 16.5 9c-2 3.6-4.5 5.4-7.5 5.4S3.5 12.6 1.5 9z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="2.2" fill="currentColor"/></svg>
+        <span class="brand-name">Trinetra</span><span class="brand-tag">Proctor console</span>
+      </div>
+
+      <form id="proctor-login-form" class="auth-form hidden" autocomplete="on">
+        <h1>Proctor sign-in</h1>
+        <p class="text-muted">Use the Proctor ID and password you were given.</p>
+        <label class="field-label" for="login-proctor-id">Proctor ID</label>
+        <input id="login-proctor-id" class="input mono" placeholder="PR-XXXXX" autocomplete="username" required>
+        <label class="field-label" for="login-password">Password</label>
+        <input id="login-password" class="input" type="password" autocomplete="current-password" required>
+        <label class="remember"><input type="checkbox" id="login-remember" checked> Keep me signed in on this computer</label>
+        <p id="login-error" class="form-error hidden"></p>
+        <button class="btn btn-primary auth-submit" type="submit">Sign in</button>
+      </form>
+
+      <form id="proctor-setup-form" class="auth-form hidden" autocomplete="off">
+        <h1>Set up the exam server</h1>
+        <p class="text-muted">Create the owner proctor account. You'll get a Proctor ID to sign in with, and you can add other proctors afterwards.</p>
+        <label class="field-label" for="setup-name">Your name</label>
+        <input id="setup-name" class="input" required>
+        <label class="field-label" for="setup-email">Email</label>
+        <input id="setup-email" class="input" type="email" placeholder="Optional">
+        <label class="field-label" for="setup-password">Password</label>
+        <input id="setup-password" class="input" type="password" minlength="8" autocomplete="new-password" required>
+        <label class="field-label" for="setup-password2">Repeat password</label>
+        <input id="setup-password2" class="input" type="password" minlength="8" autocomplete="new-password" required>
+        <p id="setup-error" class="form-error hidden"></p>
+        <button class="btn btn-primary auth-submit" type="submit">Create owner account</button>
+      </form>
+
+      <div id="proctor-setup-remote" class="auth-form hidden">
+        <h1>Not set up yet</h1>
+        <p class="text-muted">This exam server has no proctor accounts yet. Open the proctor console on the computer running Trinetra to create the first one.</p>
+      </div>
+
+      <div id="proctor-setup-done" class="auth-form hidden">
+        <h1>Your Proctor ID</h1>
+        <p class="text-muted">Write this down. You'll use it with your password to sign in.</p>
+        <div class="join-code" id="setup-done-id">PR-XXXXX</div>
+        <button id="btn-setup-continue" class="btn btn-primary auth-submit" type="button">Continue to the console</button>
+      </div>
+    </div>
+  </div>
+
   <header class="topbar">
     <div class="topbar-left">
       <div class="brand">
@@ -38,6 +87,9 @@
       <button id="btn-manual-refresh" class="btn btn-ghost btn-sm" title="Refresh now">Refresh</button>
       <button id="btn-open-exam-rules" class="btn btn-ghost btn-sm">Exam rules</button>
       <button id="btn-open-create-exam" class="btn btn-amber btn-sm">New exam</button>
+      <span class="who" id="proctor-who"></span>
+      <a href="/download" target="_blank" class="btn btn-ghost btn-sm" title="Share this page with candidates">Student download</a>
+      <button id="btn-sign-out" class="btn btn-ghost btn-sm">Sign out</button>
     </div>
   </header>
 
@@ -88,6 +140,7 @@
       <button class="proctor-tab-btn active" id="tab-btn-grid" data-view="grid">Live grid <span class="tab-count" id="badge-grid-count">0</span></button>
       <button class="proctor-tab-btn" id="tab-btn-table" data-view="table">Roster and scores</button>
       <button class="proctor-tab-btn" id="tab-btn-logs" data-view="logs">Activity stream</button>
+      <button class="proctor-tab-btn" id="tab-btn-proctors" data-view="proctors">Proctors</button>
       <span class="view-tabs-meta">Showing <strong id="grid-room-label">all exams</strong></span>
     </nav>
 
@@ -100,6 +153,42 @@
           <tbody id="exams-table-body">
             <tr><td colspan="7" class="text-center text-muted">Loading exams…</td></tr>
           </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="section-proctors" class="dashboard-view-section hidden">
+      <div class="toolbar">
+        <span class="text-muted">Everyone who can sign in to this console. Only the owner can add or disable proctors.</span>
+        <button id="btn-add-proctor" class="btn btn-primary btn-sm toolbar-end">Add proctor</button>
+        <button id="btn-change-password" class="btn btn-outline btn-sm">Change my password</button>
+      </div>
+      <div id="add-proctor-panel" class="card form-card hidden">
+        <div class="form-grid">
+          <div><label class="field-label" for="new-proctor-name">Name</label><input id="new-proctor-name" class="input"></div>
+          <div><label class="field-label" for="new-proctor-email">Email</label><input id="new-proctor-email" class="input" type="email" placeholder="Optional"></div>
+        </div>
+        <div class="dialog-actions">
+          <span id="add-proctor-status" class="text-muted dialog-status"></span>
+          <button id="btn-cancel-add-proctor" class="btn btn-outline btn-sm">Cancel</button>
+          <button id="btn-save-proctor" class="btn btn-primary btn-sm">Create account</button>
+        </div>
+      </div>
+      <div id="change-password-panel" class="card form-card hidden">
+        <div class="form-grid">
+          <div><label class="field-label" for="pw-current">Current password</label><input id="pw-current" class="input" type="password" autocomplete="current-password"></div>
+          <div><label class="field-label" for="pw-new">New password</label><input id="pw-new" class="input" type="password" minlength="8" autocomplete="new-password"></div>
+        </div>
+        <div class="dialog-actions">
+          <span id="pw-status" class="text-muted dialog-status"></span>
+          <button id="btn-cancel-pw" class="btn btn-outline btn-sm">Cancel</button>
+          <button id="btn-save-pw" class="btn btn-primary btn-sm">Change password</button>
+        </div>
+      </div>
+      <div class="card table-card">
+        <table class="dashboard-table">
+          <thead><tr><th>Proctor ID</th><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th class="text-right"></th></tr></thead>
+          <tbody id="proctors-table-body"></tbody>
         </table>
       </div>
     </section>
@@ -368,6 +457,8 @@
         <div><label class="field-label" for="input-new-exam-code">Code</label><input type="text" id="input-new-exam-code" class="input mono" placeholder="Generated if empty"></div>
         <div><label class="field-label" for="input-new-exam-duration">Duration (minutes)</label><input type="number" id="input-new-exam-duration" class="input" value="30" min="5" max="180"></div>
         <div></div>
+        <div><label class="field-label" for="input-new-exam-start">Opens at <span class="text-muted">(optional)</span></label><input type="datetime-local" id="input-new-exam-start" class="input"></div>
+        <div><label class="field-label" for="input-new-exam-end">Closes at <span class="text-muted">(optional)</span></label><input type="datetime-local" id="input-new-exam-end" class="input"></div>
         <div class="span-2"><label class="field-label" for="input-new-exam-desc">Instructions for candidates</label><input type="text" id="input-new-exam-desc" class="input" placeholder="Documentation allowed. AI assistants are not."></div>
       </div>
       <div class="builder">

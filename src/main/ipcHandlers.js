@@ -55,6 +55,22 @@ function registerIpcHandlers({ mainWindow, backendPort, backendUrl, appVersion, 
     return serverUrl;
   });
 
+  // Opens the proctor console in the system browser (it has its own sign-in).
+  ipc.handle('system:open-console', (event) => {
+    if (!isAuthorizedSender(event, mainWindow) || !serverUrl) return false;
+    require('electron').shell.openExternal(`${serverUrl}/admin`);
+    return true;
+  });
+
+  // "Continue with Google": Supabase Auth in a small sign-in window. The tokens come back in
+  // the redirect's #fragment, which is intercepted here and never loaded as a page.
+  ipc.handle('auth:google-sign-in', (event) => {
+    if (!isAuthorizedSender(event, mainWindow)) {
+      throw new Error('Unauthorized IPC invocation: auth:google-sign-in');
+    }
+    return googleSignIn(mainWindow);
+  });
+
   ipc.handle('system:get-server-url', (event) => {
     if (!isAuthorizedSender(event, mainWindow)) {
       throw new Error('Unauthorized IPC invocation: get-server-url');
@@ -182,6 +198,58 @@ function registerIpcHandlers({ mainWindow, backendPort, backendUrl, appVersion, 
   }
 }
 
+function googleSignIn(parent) {
+  const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+  if (!supabaseUrl) return Promise.reject(new Error('Google sign-in is not configured'));
+  const { BrowserWindow } = require('electron');
+  const redirectTo = 'http://localhost:3000/trinetra-auth';
+  const authorizeUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectTo)}&prompt=select_account`;
+
+  return new Promise((resolve, reject) => {
+    const win = new BrowserWindow({
+      parent, modal: true, width: 480, height: 640, show: false, autoHideMenuBar: true,
+      title: 'Sign in with Google',
+      webPreferences: { partition: 'google-sign-in', contextIsolation: true, nodeIntegration: false, sandbox: true }
+    });
+    let settled = false;
+    const finish = (err, value) => {
+      if (settled) return;
+      settled = true;
+      if (!win.isDestroyed()) win.destroy();
+      if (err) reject(err); else resolve(value);
+    };
+    const inspect = (event, url) => {
+      if (!url || !/[#?&](access_token|error)=/.test(url) || url.startsWith(supabaseUrl)) return;
+      if (event && event.preventDefault) event.preventDefault();
+      const u = new URL(url);
+      const params = new URLSearchParams(u.hash.replace(/^#/, '') || u.search);
+      if (params.get('access_token')) {
+        finish(null, { accessToken: params.get('access_token'), refreshToken: params.get('refresh_token') || null });
+      } else {
+        finish(new Error(params.get('error_description') || params.get('error') || 'Google sign-in failed'));
+      }
+    };
+    win.webContents.on('will-redirect', inspect);
+    win.webContents.on('will-navigate', inspect);
+    win.webContents.on('did-navigate', (_e, url) => inspect(null, url));
+    // Supabase answers with a JSON error page (no redirect) when the Google provider is off
+    win.webContents.on('did-finish-load', async () => {
+      const url = win.webContents.getURL();
+      if (!url.startsWith(`${supabaseUrl}/auth/v1/`)) return;
+      try {
+        const text = await win.webContents.executeJavaScript('document.body ? document.body.innerText : ""');
+        const body = JSON.parse(text);
+        if (body && (body.msg || body.error_description || body.message)) {
+          finish(new Error(/not enabled/i.test(body.msg || '') ? 'Google sign-in is not switched on for this Supabase project yet.' : (body.msg || body.error_description || body.message)));
+        }
+      } catch (_) {}
+    });
+    win.once('ready-to-show', () => win.show());
+    win.on('closed', () => finish(Object.assign(new Error('Sign-in window closed'), { cancelled: true })));
+    win.loadURL(authorizeUrl).catch(() => {});
+  });
+}
+
 function unregisterIpcHandlers(ipc = registeredIpcInstance || electronIpcMain) {
   if (!ipc) return;
 
@@ -189,6 +257,8 @@ function unregisterIpcHandlers(ipc = registeredIpcInstance || electronIpcMain) {
     'system:get-backend-port',
     'system:get-server-url',
     'system:set-server-url',
+    'system:open-console',
+    'auth:google-sign-in',
     'app:get-backend-port',
     'system:get-app-version',
     'app:get-version',

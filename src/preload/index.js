@@ -44,6 +44,10 @@ function createProctorAPI(ipc = ipcRenderer) {
       return ipc.invoke('system:get-backend-port');
     },
 
+    openConsole: () => ipc.invoke('system:open-console'),
+
+    googleSignIn: () => ipc.invoke('auth:google-sign-in'),
+
     getServerUrl: async () => {
       return ipc.invoke('system:get-server-url');
     },

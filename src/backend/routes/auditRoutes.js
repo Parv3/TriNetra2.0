@@ -3,7 +3,7 @@ const router = express.Router();
 const proctorService = require('../services/proctorService');
 const websocketService = require('../services/websocketService');
 const datastore = require('../db/datastore');
-const { requireProctor } = require('../middleware/authMiddleware');
+const { requireProctor, requireProctorOrSessionOwner } = require('../middleware/authMiddleware');
 
 // GET /api/audit/overview — High-level KPI metrics across all candidates (Proctor only)
 router.get('/overview', requireProctor, async (req, res, next) => {
@@ -79,7 +79,7 @@ router.post('/session/:id/action', requireProctor, async (req, res, next) => {
 });
 
 // GET /api/audit/session/:id/report
-router.get('/session/:id/report', async (req, res, next) => {
+router.get('/session/:id/report', requireProctorOrSessionOwner, async (req, res, next) => {
   try {
     const report = await proctorService.getAuditReport(req.params.id, req.query);
     if (req.query.format === 'html') {
@@ -102,7 +102,7 @@ router.get('/session/:id/report', async (req, res, next) => {
 });
 
 // GET /api/audit/session/:id/export
-router.get('/session/:id/export', async (req, res, next) => {
+router.get('/session/:id/export', requireProctorOrSessionOwner, async (req, res, next) => {
   try {
     const report = await proctorService.getAuditReport(req.params.id, req.query);
     const format = req.query.format || 'html';

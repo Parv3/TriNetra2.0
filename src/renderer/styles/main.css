@@ -549,3 +549,31 @@ body.web-mode #tab-strip-area, body.web-mode #omnibox-bar, body.web-mode .titleb
 .server-picker .field-hint { margin-top: 8px; }
 .link-btn { color: var(--brand); font-weight: 500; }
 .link-btn:hover { text-decoration: underline; }
+.exam-preview .exam-window { display: block; margin-top: 6px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.exam-preview .exam-window:empty { display: none; }
+.exam-preview .exam-window.upcoming { color: #8a5a00; }
+.exam-preview .exam-window.live { color: var(--success, #1b7f4b); }
+
+/* Continue with Google */
+.google-account { margin: 4px 0 18px; padding: 12px 14px; border: 1px solid var(--line, #e2e8f0); border-radius: var(--radius-s, 10px); background: #fff; }
+.google-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.btn-google { display: inline-flex; align-items: center; gap: 10px; padding: 9px 18px; border: 1px solid #dadce0; border-radius: 999px; background: #fff; color: #252726; font-weight: 600; cursor: pointer; }
+.btn-google:hover { background: #f8fafc; border-color: #c4c7cc; }
+.btn-google:disabled { opacity: .65; cursor: progress; }
+.google-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+.google-who { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.google-who strong { font-size: 14px; }
+.google-who span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
+/* Device status strip (title bar) — the taskbar is hidden while the exam is full-screen */
+.status-strip { display: flex; align-items: center; gap: 4px; padding: 0 10px; -webkit-app-region: no-drag; font-size: 12px; color: var(--chrome-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.status-item { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 999px; }
+.status-item.hidden { display: none; }
+.status-item svg { flex-shrink: 0; opacity: .85; }
+.status-item[data-tone="ok"] svg { color: #7ee2a8; }
+.status-item[data-tone="warn"] { background: rgba(255, 189, 89, .18); color: #ffd590; }
+.status-item[data-tone="bad"] { background: rgba(255, 99, 99, .2); color: #ffb3b3; }
+#status-clock { font-weight: 600; color: #fff; }
+/* During an attempt the window cannot be minimised or resized */
+body.locked #btn-minimize, body.locked #btn-maximize { display: none; }
+@media (max-width: 1180px) { #status-network .status-text, #status-camera .status-text { display: none; } }

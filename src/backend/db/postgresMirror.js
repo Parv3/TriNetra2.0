@@ -139,6 +139,28 @@ CREATE TABLE IF NOT EXISTS trinetra.proctor_actions (
 );
 `;
 
+// Columns added after the first release; safe to re-run.
+const UPGRADE_SQL = `
+ALTER TABLE trinetra.exams ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ;
+ALTER TABLE trinetra.exams ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ;
+ALTER TABLE trinetra.exams ADD COLUMN IF NOT EXISTS created_by TEXT;
+`;
+
+// Hosted Postgres (e.g. Supabase) exposes tables through a public API; with row-level
+// security on and no policies, only the server's own database login can read them.
+const TABLES = ['candidates', 'exams', 'exam_questions', 'attempts', 'answers', 'violations', 'page_visits',
+  'searches', 'activity_events', 'assistant_messages', 'proctor_actions'];
+// Teachers read through the trinetra_reader role (see docs/TEACHER_SQL.md).
+const HARDENING_SQL = [
+  `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'trinetra_reader') THEN CREATE ROLE trinetra_reader NOLOGIN; END IF; END $$`,
+  'GRANT USAGE ON SCHEMA trinetra TO trinetra_reader',
+  'GRANT SELECT ON ALL TABLES IN SCHEMA trinetra TO trinetra_reader',
+  ...TABLES.map(t => `ALTER TABLE trinetra.${t} ENABLE ROW LEVEL SECURITY`),
+  ...TABLES.map(t => `DROP POLICY IF EXISTS reader_select ON trinetra.${t}`),
+  ...TABLES.map(t => `CREATE POLICY reader_select ON trinetra.${t} FOR SELECT TO trinetra_reader USING (true)`),
+  ...['v_attempts', 'v_student_timeline', 'v_ai_and_search'].map(v => `ALTER VIEW trinetra.${v} SET (security_invoker = on)`)
+];
+
 const VIEWS_SQL = `
 CREATE OR REPLACE VIEW trinetra.v_attempts AS
 SELECT a.id AS attempt_id, a.roll_no, a.candidate_name, c.email, c.institution,
@@ -211,7 +233,11 @@ class PostgresMirror {
       this.pool = connectionStringOrPool;
     }
     await this.pool.query(SCHEMA_SQL);
+    await this.pool.query(UPGRADE_SQL);
     await this.pool.query(VIEWS_SQL);
+    for (const sql of HARDENING_SQL) {
+      try { await this.pool.query(sql); } catch (_) { /* not supported by this engine (e.g. tests) */ }
+    }
     this.status.enabled = true;
   }
 
@@ -279,12 +305,14 @@ class PostgresMirror {
     }
 
     for (const e of Object.values(data.exams || {})) {
-      const row = [e.id, e.code || null, e.title, e.description || null, e.durationMinutes || null, e.status || 'OPEN', json(e.rules || {}), (e.questions || []).length, ts(e.createdAt)];
+      const row = [e.id, e.code || null, e.title, e.description || null, e.durationMinutes || null, e.status || 'OPEN', json(e.rules || {}), (e.questions || []).length, ts(e.createdAt),
+        ts(e.startsAt), ts(e.endsAt), e.createdBy || null];
       if (this.changed('exam', e.id, row)) {
-        await q(`INSERT INTO trinetra.exams (id, join_code, title, description, duration_minutes, status, rules, question_count, created_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        await q(`INSERT INTO trinetra.exams (id, join_code, title, description, duration_minutes, status, rules, question_count, created_at, starts_at, ends_at, created_by)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
                  ON CONFLICT (id) DO UPDATE SET join_code = EXCLUDED.join_code, title = EXCLUDED.title, description = EXCLUDED.description,
-                   duration_minutes = EXCLUDED.duration_minutes, status = EXCLUDED.status, rules = EXCLUDED.rules, question_count = EXCLUDED.question_count`, row);
+                   duration_minutes = EXCLUDED.duration_minutes, status = EXCLUDED.status, rules = EXCLUDED.rules, question_count = EXCLUDED.question_count,
+                   starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, created_by = EXCLUDED.created_by`, row);
         written++;
       }
       for (const [i, qn] of (e.questions || []).entries()) {
@@ -392,3 +420,5 @@ module.exports = new PostgresMirror();
 module.exports.PostgresMirror = PostgresMirror;
 module.exports.SCHEMA_SQL = SCHEMA_SQL;
 module.exports.VIEWS_SQL = VIEWS_SQL;
+module.exports.UPGRADE_SQL = UPGRADE_SQL;
+module.exports.HARDENING_SQL = HARDENING_SQL;

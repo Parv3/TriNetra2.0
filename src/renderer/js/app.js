@@ -99,7 +99,6 @@
     document.getElementById('tab-strip-area')?.classList.toggle('hidden', !inExam);
     document.getElementById('omnibox-bar')?.classList.toggle('hidden', !inExam);
     // Students never get a shortcut to the proctor console once an attempt is underway.
-    document.getElementById('btn-open-dashboard')?.classList.toggle('hidden', Boolean(state.sessionId));
   }
   window.switchView = switchView;
 
@@ -188,9 +187,11 @@
 
   // ── Lockdown (desktop shell only) ──
   async function beginLockdown(sessionId) {
+    document.body.classList.add('locked');
     try { await window.proctorAPI?.startLockdown?.(sessionId); } catch (_) {}
   }
   async function endLockdown() {
+    document.body.classList.remove('locked');
     try { await window.proctorAPI?.stopLockdown?.(); } catch (_) {}
   }
   window.beginLockdown = beginLockdown;
@@ -227,10 +228,13 @@
   // ── Title bar ──
   function initTitlebar() {
     const proctorAPI = window.proctorAPI;
-    document.getElementById('btn-open-dashboard')?.addEventListener('click', () => {
+    // Proctors on this computer: Ctrl+Shift+P opens the console in the normal browser (sign-in
+    // still required). Never available once an exam attempt has started.
+    document.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') || state.sessionId) return;
+      e.preventDefault();
       const adminUrl = `${state.baseUrl}/admin`;
-      // The desktop shell denies popups, so open the console as a guest tab there.
-      if (proctorAPI && window.TabsUI) window.TabsUI.createTab(adminUrl);
+      if (proctorAPI && proctorAPI.openConsole) proctorAPI.openConsole();
       else window.open(adminUrl, '_blank');
     });
     document.getElementById('btn-minimize')?.addEventListener('click', () => proctorAPI && proctorAPI.minimizeWindow());

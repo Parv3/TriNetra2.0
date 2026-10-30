@@ -1,0 +1,6 @@
+{
+  "databaseUrl": "postgresql://postgres.yttybuitwhrscfeabjxz:YOUR-DB-PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres",
+  "supabaseUrl": "https://yttybuitwhrscfeabjxz.supabase.co",
+  "supabaseAnonKey": "sb_publishable_piTcmmumQu7M8T5r5NNSOA_ZgcdT4_y",
+  "serverUrl": ""
+}

@@ -24,9 +24,21 @@ router.post('/session/start', optionalAuthMiddleware, (req, res, next) => {
     const exam = examId && assessmentService.datastore && typeof assessmentService.datastore.getExam === 'function'
       ? assessmentService.datastore.getExam(examId)
       : null;
-    const durationMinutes = req.body && req.body.durationMinutes !== undefined
+    let durationMinutes = req.body && req.body.durationMinutes !== undefined
       ? Number(req.body.durationMinutes)
       : ((exam && exam.durationMinutes) || 30);
+
+    const window = scheduleState(exam);
+    if (window === 'UPCOMING') {
+      return res.status(403).json({ error: true, statusCode: 403, code: 'EXAM_NOT_STARTED', startsAt: exam.startsAt, message: `This exam opens at ${formatWhen(exam.startsAt)}.` });
+    }
+    if (window === 'ENDED') {
+      return res.status(403).json({ error: true, statusCode: 403, code: 'EXAM_ENDED', message: 'The scheduled window for this exam has ended.' });
+    }
+    // A late starter gets only the time left in the window
+    if (exam && exam.endsAt) {
+      durationMinutes = Math.max(1, Math.min(durationMinutes, Math.floor((exam.endsAt - Date.now()) / 60000)));
+    }
 
     const result = assessmentService.startSession(candidateId, durationMinutes, { maxStrikes, examId, deviceId });
     return res.status(200).json(result);
@@ -203,8 +215,36 @@ function examSummary(exam, sessions) {
     status: exam.status || 'OPEN',
     questionCount: (questions || []).length,
     sessionCount: examSessions.length,
-    liveCount: examSessions.filter(s => s.status === 'IN_PROGRESS').length
+    liveCount: examSessions.filter(s => s.status === 'IN_PROGRESS').length,
+    schedule: scheduleState(exam)
   };
+}
+
+/** Where an exam's start/end window stands: UPCOMING, LIVE, ENDED, or null when unscheduled. */
+function scheduleState(exam, now = Date.now()) {
+  if (!exam || (!exam.startsAt && !exam.endsAt)) return null;
+  if (exam.startsAt && now < exam.startsAt) return 'UPCOMING';
+  if (exam.endsAt && now >= exam.endsAt) return 'ENDED';
+  return 'LIVE';
+}
+
+function toEpoch(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const ms = typeof value === 'number' ? value : Date.parse(value);
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+/** Reads startsAt/endsAt (epoch ms or ISO text) from a request body. */
+function parseSchedule(body) {
+  const startsAt = toEpoch(body.startsAt);
+  const endsAt = toEpoch(body.endsAt);
+  if (Number.isNaN(startsAt) || Number.isNaN(endsAt)) return { error: 'Start and end must be valid dates.' };
+  if (startsAt && endsAt && endsAt <= startsAt) return { error: 'The exam must end after it starts.' };
+  return { startsAt, endsAt };
+}
+
+function formatWhen(ms) {
+  return new Date(ms).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 /**
@@ -255,7 +295,7 @@ function broadcast(payload) {
 }
 
 // GET /api/assessment/exams — proctor list (no questions)
-router.get('/exams', (req, res) => {
+router.get('/exams', requireProctor, (req, res) => {
   const datastore = require('../db/datastore');
   const sessions = datastore.getAllSessions();
   const exams = datastore.getAllExams()
@@ -274,7 +314,14 @@ router.get('/exams/join/:code', (req, res) => {
   if ((exam.status || 'OPEN') !== 'OPEN') {
     return res.status(403).json({ error: true, code: 'EXAM_CLOSED', message: 'This exam is not accepting candidates right now.' });
   }
+  if (scheduleState(exam) === 'ENDED') {
+    return res.status(403).json({ error: true, code: 'EXAM_ENDED', message: `This exam closed at ${formatWhen(exam.endsAt)}.` });
+  }
   return res.status(200).json({
+    startsAt: exam.startsAt || null,
+    endsAt: exam.endsAt || null,
+    schedule: scheduleState(exam),
+    serverTime: Date.now(),
     id: exam.id,
     code: exam.code,
     title: exam.title,
@@ -286,7 +333,7 @@ router.get('/exams/join/:code', (req, res) => {
 });
 
 // GET /api/assessment/exams/:id — full exam for the proctor console
-router.get('/exams/:id', (req, res) => {
+router.get('/exams/:id', requireProctor, (req, res) => {
   const datastore = require('../db/datastore');
   const exam = datastore.getExam(req.params.id);
   if (!exam) {
@@ -315,6 +362,9 @@ router.post('/exams', requireProctor, (req, res) => {
     questions = result.questions;
   }
 
+  const schedule = parseSchedule(body);
+  if (schedule.error) return res.status(400).json({ error: true, message: schedule.error });
+
   const rules = { ...RULE_DEFAULTS };
   Object.keys(RULE_DEFAULTS).forEach(key => {
     if (body.rules && body.rules[key] !== undefined) {
@@ -332,6 +382,9 @@ router.post('/exams', requireProctor, (req, res) => {
     rules,
     ...(questions ? { questions } : {}),
     status: 'OPEN',
+    startsAt: schedule.startsAt,
+    endsAt: schedule.endsAt,
+    createdBy: (req.user && (req.user.proctorId || req.user.username)) || null,
     createdAt: Date.now()
   });
 
@@ -347,6 +400,18 @@ router.patch('/exams/:id/status', requireProctor, (req, res) => {
   const status = String((req.body && req.body.status) || '').toUpperCase();
   if (!['OPEN', 'CLOSED'].includes(status)) return res.status(400).json({ error: true, message: 'status must be OPEN or CLOSED' });
   const updated = datastore.createOrUpdateExam({ id: exam.id, status });
+  broadcast({ type: 'EXAM_RULES_UPDATED', examId: exam.id });
+  return res.status(200).json(examSummary(updated, datastore.getAllSessions()));
+});
+
+// PATCH /api/assessment/exams/:id/schedule — set or clear the start/end window
+router.patch('/exams/:id/schedule', requireProctor, (req, res) => {
+  const datastore = require('../db/datastore');
+  const exam = datastore.getExam(req.params.id);
+  if (!exam) return res.status(404).json({ error: true, message: `Exam ${req.params.id} not found` });
+  const schedule = parseSchedule(req.body || {});
+  if (schedule.error) return res.status(400).json({ error: true, message: schedule.error });
+  const updated = datastore.createOrUpdateExam({ id: exam.id, startsAt: schedule.startsAt, endsAt: schedule.endsAt });
   broadcast({ type: 'EXAM_RULES_UPDATED', examId: exam.id });
   return res.status(200).json(examSummary(updated, datastore.getAllSessions()));
 });

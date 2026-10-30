@@ -74,7 +74,8 @@ class DataStore {
       violations: [],       // Array of ProctorViolation objects
       tabActivities: [],    // Array of TabActivity objects
       inputActivities: [],  // Array of InputActivity objects
-      exams: {}             // examId -> ExamConfiguration
+      exams: {},            // examId -> ExamConfiguration
+      proctors: {}          // proctorId -> ProctorAccount (password stored as scrypt hash)
     };
   }
 
@@ -259,8 +260,10 @@ class DataStore {
 
   updateCandidate(id, updates) {
     if (!id || !this.data.candidates[id]) return null;
+    const previousEmail = (this.data.candidates[id].email || '').toLowerCase();
     this.data.candidates[id] = { ...this.data.candidates[id], ...updates };
     if (updates.email) {
+      if (previousEmail && this.data.candidateByEmail[previousEmail] === id) delete this.data.candidateByEmail[previousEmail];
       this.data.candidateByEmail[updates.email.toLowerCase()] = id;
     }
     this._triggerPersistence();
@@ -269,6 +272,30 @@ class DataStore {
 
   getAllCandidates() {
     return Object.values(this.data.candidates).map((c) => ({ ...c }));
+  }
+
+  // --- Proctor accounts ---
+  getProctor(id) {
+    if (!id || !this.data.proctors) return null;
+    const p = this.data.proctors[String(id).toUpperCase()];
+    return p ? { ...p } : null;
+  }
+
+  getProctorByEmail(email) {
+    if (!email || !this.data.proctors) return null;
+    const p = Object.values(this.data.proctors).find(x => x.email && x.email.toLowerCase() === String(email).toLowerCase());
+    return p ? { ...p } : null;
+  }
+
+  listProctors() {
+    return Object.values(this.data.proctors || {}).map(p => ({ ...p }));
+  }
+
+  saveProctor(proctor) {
+    if (!this.data.proctors) this.data.proctors = {};
+    this.data.proctors[proctor.id] = { ...(this.data.proctors[proctor.id] || {}), ...proctor };
+    this._triggerPersistence();
+    return { ...this.data.proctors[proctor.id] };
   }
 
   // --- OTP Authentication ---

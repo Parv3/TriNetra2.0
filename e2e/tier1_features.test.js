@@ -133,7 +133,7 @@ describe('Tier 1: Feature Coverage Suite (60 Tests)', () => {
       const verifyRes = await harness.verifyOtp('STUDENT-2026-B', otp);
       assert.strictEqual(verifyRes.status, 200, 'Should return HTTP 200 on valid OTP');
       assert.ok(typeof verifyRes.data.token === 'string', 'Token must be returned');
-      assert.ok(verifyRes.data.token.startsWith('sess_tok_'), 'Token should have sess_tok_ prefix');
+      assert.ok(/^sess_tok_|^[\w-]+\.[\w-]+\.[\w-]+$/.test(verifyRes.data.token), 'Token should be a session token or signed JWT');
       assert.strictEqual(verifyRes.data.session.studentId, 'STUDENT-2026-B');
     });
 

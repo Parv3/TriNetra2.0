@@ -157,8 +157,40 @@ function optionalAuthMiddleware(req, res, next) {
   next();
 }
 
+/**
+ * A proctor, or the candidate whose own attempt is in the URL (students may read their
+ * own session record, never anyone else's).
+ */
+function requireProctorOrSessionOwner(req, res, next) {
+  const sessionId = req.params.id || req.params.sessionId;
+  const header = req.headers['authorization'] || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : (req.query && req.query.token) || null;
+  const session = token ? authService.validateSessionToken(token) : null;
+  if (session && session.role === 'candidate') {
+    const datastore = require('../db/datastore');
+    const attempt = datastore.getSession(sessionId);
+    if (attempt && (attempt.candidateId === session.candidateId || attempt.studentId === session.candidateId)) {
+      req.role = 'candidate';
+      req.user = session;
+      return next();
+    }
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'You can only view your own session record.' });
+  }
+  return requireProctor(req, res, next);
+}
+
+/** Only the owner proctor (created at first setup) may manage other proctors. */
+function requireOwnerProctor(req, res, next) {
+  requireProctor(req, res, () => {
+    if (req.user && (req.user.isOwner || !req.user.proctorId)) return next();
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'Only the owner proctor can manage proctor accounts.' });
+  });
+}
+
 module.exports = {
   authMiddleware,
+  requireProctorOrSessionOwner,
+  requireOwnerProctor,
   requireProctor,
   requireCandidate,
   optionalAuthMiddleware

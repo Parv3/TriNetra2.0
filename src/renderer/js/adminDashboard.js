@@ -20,24 +20,163 @@
     proctorWs: null,
     activeExamId: 'ALL',
     exams: [],
-    proctorToken: (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('trinetra_proctor_token') : '') || '',
+    proctorToken: (() => {
+      try { return localStorage.getItem('trinetra_proctor_token') || sessionStorage.getItem('trinetra_proctor_token') || ''; } catch (_) { return ''; }
+    })(),
+    proctor: null,
 
+    /**
+     * Resolves with a valid proctor token. Shows the sign-in screen (or, on a brand-new
+     * server opened from the host computer, the owner setup screen) until there is one.
+     */
     async ensureAuthenticated() {
-      if (this.proctorToken) return this.proctorToken;
+      if (this.proctorToken) {
+        try {
+          const me = await (await fetch(`${this.baseUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${this.proctorToken}` } })).json();
+          if (me.authenticated && me.role === 'proctor') {
+            this.setSignedIn(this.proctorToken, me.user);
+            return this.proctorToken;
+          }
+        } catch (_) {}
+        this.clearToken();
+      }
+      return this.showAuthScreen();
+    },
+
+    storeToken(token, remember) {
       try {
-        const res = await fetch(`${this.baseUrl}/api/auth/proctor/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: 'admin', password: 'trinetra2026' })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          this.proctorToken = data.token;
-          try { sessionStorage.setItem('trinetra_proctor_token', data.token); } catch (_) {}
-          return this.proctorToken;
-        }
+        (remember ? localStorage : sessionStorage).setItem('trinetra_proctor_token', token);
+        (remember ? sessionStorage : localStorage).removeItem('trinetra_proctor_token');
       } catch (_) {}
-      return null;
+    },
+
+    clearToken() {
+      this.proctorToken = '';
+      try { localStorage.removeItem('trinetra_proctor_token'); sessionStorage.removeItem('trinetra_proctor_token'); } catch (_) {}
+    },
+
+    setSignedIn(token, user) {
+      this.proctorToken = token;
+      this.proctor = user || {};
+      document.getElementById('proctor-auth').classList.add('hidden');
+      const who = document.getElementById('proctor-who');
+      if (who) who.textContent = `${this.proctor.name || 'Proctor'}${this.proctor.proctorId ? ` · ${this.proctor.proctorId}` : ''}`;
+      const owner = Boolean(this.proctor.isOwner);
+      document.getElementById('btn-add-proctor')?.classList.toggle('hidden', !owner);
+    },
+
+    async showAuthScreen() {
+      const screen = document.getElementById('proctor-auth');
+      const show = (id) => ['proctor-login-form', 'proctor-setup-form', 'proctor-setup-remote', 'proctor-setup-done']
+        .forEach(f => document.getElementById(f).classList.toggle('hidden', f !== id));
+      screen.classList.remove('hidden');
+
+      let setup = { needsSetup: false };
+      try { setup = await (await fetch(`${this.baseUrl}/api/auth/proctor/setup`)).json(); } catch (_) {}
+      show(setup.needsSetup ? (setup.fromThisComputer ? 'proctor-setup-form' : 'proctor-setup-remote') : 'proctor-login-form');
+      document.querySelector('#proctor-auth form:not(.hidden) input')?.focus();
+
+      return new Promise((resolve) => {
+        const fail = (id, msg) => { const el = document.getElementById(id); el.textContent = msg; el.classList.remove('hidden'); };
+
+        document.getElementById('proctor-login-form').onsubmit = async (e) => {
+          e.preventDefault();
+          const remember = document.getElementById('login-remember').checked;
+          try {
+            const res = await fetch(`${this.baseUrl}/api/auth/proctor/login`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ proctorId: document.getElementById('login-proctor-id').value.trim(), password: document.getElementById('login-password').value })
+            });
+            const data = await res.json();
+            if (!res.ok) return fail('login-error', data.message || 'Sign-in failed.');
+            this.storeToken(data.token, remember);
+            this.setSignedIn(data.token, { ...data.proctor, proctorId: data.proctor && data.proctor.id });
+            resolve(data.token);
+          } catch (_) { fail('login-error', 'Could not reach the exam server.'); }
+        };
+
+        document.getElementById('proctor-setup-form').onsubmit = async (e) => {
+          e.preventDefault();
+          const password = document.getElementById('setup-password').value;
+          if (password !== document.getElementById('setup-password2').value) return fail('setup-error', 'The passwords don\'t match.');
+          try {
+            const res = await fetch(`${this.baseUrl}/api/auth/proctor/setup`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: document.getElementById('setup-name').value, email: document.getElementById('setup-email').value, password })
+            });
+            const data = await res.json();
+            if (!res.ok) return fail('setup-error', data.message || 'Setup failed.');
+            document.getElementById('setup-done-id').textContent = data.proctorId;
+            show('proctor-setup-done');
+            document.getElementById('btn-setup-continue').onclick = () => {
+              this.storeToken(data.token, true);
+              this.setSignedIn(data.token, { ...data.proctor, proctorId: data.proctorId });
+              resolve(data.token);
+            };
+          } catch (_) { fail('setup-error', 'Could not reach the exam server.'); }
+        };
+      });
+    },
+
+    signOut() {
+      fetch(`${this.baseUrl}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${this.proctorToken}` } }).catch(() => {});
+      this.clearToken();
+      location.reload();
+    },
+
+    // ── Proctors tab ──
+    async fetchProctors() {
+      const tbody = document.getElementById('proctors-table-body');
+      try {
+        const list = await (await this.authFetch(`${this.baseUrl}/api/auth/proctors`)).json();
+        const owner = Boolean(this.proctor && this.proctor.isOwner);
+        const when = (ts) => ts ? new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+        tbody.innerHTML = list.map(p => `
+          <tr class="${p.disabled ? 'row-disqualified' : ''}">
+            <td class="mono"><strong>${this.escapeHtml(p.id)}</strong></td>
+            <td>${this.escapeHtml(p.name)}</td>
+            <td class="text-muted">${this.escapeHtml(p.email || '—')}</td>
+            <td>${p.isOwner ? '<span class="badge badge-purple">Owner</span>' : p.disabled ? '<span class="badge badge-slate">Disabled</span>' : '<span class="badge badge-emerald">Proctor</span>'}</td>
+            <td class="text-muted">${when(p.lastLoginAt)}</td>
+            <td class="text-right">${owner && !p.isOwner ? `<button class="btn btn-outline btn-sm" data-proctor="${p.id}" data-disable="${!p.disabled}">${p.disabled ? 'Enable' : 'Disable'}</button>` : ''}</td>
+          </tr>`).join('');
+        tbody.querySelectorAll('[data-proctor]').forEach(btn => btn.addEventListener('click', async () => {
+          await this.authFetch(`${this.baseUrl}/api/auth/proctors/${btn.dataset.proctor}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ disabled: btn.dataset.disable === 'true' })
+          });
+          this.fetchProctors();
+        }));
+      } catch (_) {}
+    },
+
+    bindProctorTab() {
+      const $ = (id) => document.getElementById(id);
+      $('btn-sign-out')?.addEventListener('click', () => this.signOut());
+      $('btn-add-proctor')?.addEventListener('click', () => { $('add-proctor-panel').classList.remove('hidden'); $('add-proctor-status').textContent = ''; $('new-proctor-name').focus(); });
+      $('btn-cancel-add-proctor')?.addEventListener('click', () => $('add-proctor-panel').classList.add('hidden'));
+      $('btn-change-password')?.addEventListener('click', () => { $('change-password-panel').classList.remove('hidden'); $('pw-status').textContent = ''; $('pw-current').focus(); });
+      $('btn-cancel-pw')?.addEventListener('click', () => $('change-password-panel').classList.add('hidden'));
+      $('btn-save-proctor')?.addEventListener('click', async () => {
+        const res = await this.authFetch(`${this.baseUrl}/api/auth/proctors`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: $('new-proctor-name').value, email: $('new-proctor-email').value })
+        });
+        const data = await res.json();
+        if (!res.ok) { $('add-proctor-status').textContent = data.message || 'Could not create the account.'; return; }
+        // Shown once: the server keeps only a hash of the password.
+        $('add-proctor-status').innerHTML = `Created <strong class="mono">${this.escapeHtml(data.id)}</strong> with temporary password <strong class="mono">${this.escapeHtml(data.password)}</strong>. Share both with ${this.escapeHtml(data.name)}; this password is not shown again.`;
+        $('new-proctor-name').value = ''; $('new-proctor-email').value = '';
+        this.fetchProctors();
+      });
+      $('btn-save-pw')?.addEventListener('click', async () => {
+        const res = await this.authFetch(`${this.baseUrl}/api/auth/proctor/password`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword: $('pw-current').value, newPassword: $('pw-new').value })
+        });
+        const data = await res.json();
+        $('pw-status').textContent = res.ok ? 'Password changed.' : (data.message || 'Could not change the password.');
+        if (res.ok) { $('pw-current').value = ''; $('pw-new').value = ''; }
+      });
     },
 
     async authFetch(url, options = {}) {
@@ -50,10 +189,9 @@
       }
       let res = await fetch(url, { ...options, headers });
       if (res.status === 401) {
-        // Token might have expired or been invalidated; re-authenticate and retry once
-        this.proctorToken = '';
-        try { sessionStorage.removeItem('trinetra_proctor_token'); } catch (_) {}
-        const token = await this.ensureAuthenticated();
+        // Expired or revoked: sign in again, then retry once
+        this.clearToken();
+        const token = await this.showAuthScreen();
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
           res = await fetch(url, { ...options, headers });
@@ -71,6 +209,7 @@
 
       await this.ensureAuthenticated();
       this.bindEvents();
+      this.bindProctorTab();
       this.startClock();
       this.fetchNetworkInfo();
       this.fetchExamsList();
@@ -141,6 +280,10 @@
       } catch (_) {}
     },
 
+    formatWhen(ms) {
+      return new Date(ms).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    },
+
     formatCode(code) {
       const c = String(code || '');
       return c.length > 3 ? `${c.slice(0, 3)}-${c.slice(3)}` : c;
@@ -154,6 +297,10 @@
       } else {
         tbody.innerHTML = this.exams.map(ex => {
           const open = (ex.status || 'OPEN') === 'OPEN';
+          const badge = !open ? ['badge-slate', 'Closed']
+            : ex.schedule === 'UPCOMING' ? ['badge-amber', `Opens ${this.formatWhen(ex.startsAt)}`]
+            : ex.schedule === 'ENDED' ? ['badge-slate', 'Window ended']
+            : ['badge-emerald', ex.endsAt ? `Open until ${this.formatWhen(ex.endsAt)}` : 'Open'];
           return `
             <tr>
               <td><div class="candidate-cell"><span class="candidate-cell-name">${this.escapeHtml(ex.title)}</span><span class="candidate-cell-email">${this.escapeHtml(ex.description || '')}</span></div></td>
@@ -161,7 +308,7 @@
               <td class="mono">${ex.questionCount}</td>
               <td class="mono">${ex.durationMinutes} min</td>
               <td>${ex.sessionCount}${ex.liveCount ? ` <span class="text-success">· ${ex.liveCount} live</span>` : ''}</td>
-              <td><span class="badge ${open ? 'badge-emerald' : 'badge-slate'}">${open ? 'Open' : 'Closed'}</span></td>
+              <td><span class="badge ${badge[0]}">${badge[1]}</span></td>
               <td class="text-right">
                 <button class="btn btn-outline btn-sm" data-action="watch" data-id="${ex.id}">Watch</button>
                 <button class="btn btn-outline btn-sm" data-action="toggle" data-id="${ex.id}" data-status="${open ? 'CLOSED' : 'OPEN'}">${open ? 'Close' : 'Reopen'}</button>
@@ -317,7 +464,10 @@
           const view = btn.dataset.view;
 
           document.querySelectorAll('.dashboard-view-section').forEach(sec => sec.classList.add('hidden'));
-          if (view === 'exams') {
+          if (view === 'proctors') {
+            document.getElementById('section-proctors')?.classList.remove('hidden');
+            this.fetchProctors();
+          } else if (view === 'exams') {
             document.getElementById('section-exams')?.classList.remove('hidden');
             this.fetchExamsList();
           } else if (view === 'grid') {
@@ -1143,7 +1293,7 @@
       document.getElementById('create-exam-status-msg').textContent = '';
       document.getElementById('exam-created').classList.add('hidden');
       document.getElementById('btn-submit-create-exam').closest('.dialog-actions').classList.remove('hidden');
-      ['input-new-exam-title', 'input-new-exam-code', 'input-new-exam-desc'].forEach(id => { document.getElementById(id).value = ''; });
+      ['input-new-exam-title', 'input-new-exam-code', 'input-new-exam-desc', 'input-new-exam-start', 'input-new-exam-end'].forEach(id => { document.getElementById(id).value = ''; });
       const builder = document.getElementById('question-builder');
       builder.innerHTML = '';
       this.addQuestionEditor();
@@ -1257,8 +1407,19 @@
       const bad = questions.findIndex(q => !q.text || q.options.length < 2 || q.correctIndex < 0);
       if (bad >= 0) return fail(`Question ${bad + 1} needs text, at least two options and a marked answer.`);
 
+      const when = (id) => {
+        const v = document.getElementById(id).value;
+        return v ? new Date(v).getTime() : undefined;
+      };
+      const startsAt = when('input-new-exam-start');
+      const endsAt = when('input-new-exam-end');
+      if (startsAt && endsAt && endsAt <= startsAt) return fail('The exam must close after it opens.');
+      if (endsAt && endsAt <= Date.now()) return fail('The closing time is already in the past.');
+
       const payload = {
         title,
+        startsAt,
+        endsAt,
         id: document.getElementById('input-new-exam-code').value.trim() || undefined,
         durationMinutes: parseInt(document.getElementById('input-new-exam-duration').value, 10) || 30,
         description: document.getElementById('input-new-exam-desc').value.trim(),

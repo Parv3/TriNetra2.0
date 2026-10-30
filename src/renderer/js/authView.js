@@ -43,6 +43,7 @@
       });
 
       this.initServerPicker();
+      this.initGoogle();
 
       $('btn-request-otp')?.addEventListener('click', () => this.join());
       ['input-exam-code', 'input-student-name', 'input-student-id'].forEach(id => {
@@ -57,6 +58,99 @@
       this.bindOtpInputs();
 
       $('btn-capture-face')?.addEventListener('click', () => this.captureFace());
+    },
+
+    // ── Google account (Supabase Auth), remembered across launches ──
+
+    googleKey: 'trinetra.google',
+
+    loadGoogle() {
+      try { return JSON.parse(localStorage.getItem(this.googleKey)) || null; } catch (_) { return null; }
+    },
+
+    saveGoogle(value) {
+      try {
+        if (value) localStorage.setItem(this.googleKey, JSON.stringify(value));
+        else localStorage.removeItem(this.googleKey);
+      } catch (_) {}
+      this.google = value;
+      this.renderGoogle();
+    },
+
+    async initGoogle() {
+      const $ = (id) => document.getElementById(id);
+      this.google = this.loadGoogle();
+      $('btn-google')?.addEventListener('click', () => this.signInWithGoogle());
+      $('btn-google-out')?.addEventListener('click', () => this.saveGoogle(null));
+      await this.refreshGoogleAvailability();
+    },
+
+    /** Only offered in the desktop app, and only when the exam server can verify Google sign-ins. */
+    async refreshGoogleAvailability() {
+      const box = document.getElementById('google-account');
+      let enabled = false;
+      if (window.proctorAPI && typeof window.proctorAPI.googleSignIn === 'function') {
+        try { enabled = (await window.api.get('/api/auth/google/config')).enabled; } catch (_) {}
+      }
+      box?.classList.toggle('hidden', !enabled);
+      this.googleAvailable = enabled;
+      this.renderGoogle();
+    },
+
+    renderGoogle() {
+      const $ = (id) => document.getElementById(id);
+      const g = this.google;
+      $('google-signed-out')?.classList.toggle('hidden', Boolean(g));
+      $('google-signed-in')?.classList.toggle('hidden', !g);
+      if (!g) return;
+      $('google-name').textContent = g.name || 'Google account';
+      $('google-email').textContent = g.email;
+      const avatar = $('google-avatar');
+      if (g.avatarUrl) { avatar.src = g.avatarUrl; avatar.classList.remove('hidden'); } else avatar.classList.add('hidden');
+      // Prefill what we know; the roll number is remembered after the first exam
+      const name = $('input-student-name');
+      const roll = $('input-student-id');
+      if (name && !name.value && (g.profileName || g.name)) name.value = g.profileName || g.name;
+      if (roll && !roll.value && g.rollNo) roll.value = g.rollNo;
+    },
+
+    async signInWithGoogle() {
+      const errorEl = document.getElementById('auth-error-google');
+      const btn = document.getElementById('btn-google');
+      this.setBusy(btn, true, 'Waiting for Google…');
+      try {
+        const tokens = await window.proctorAPI.googleSignIn();
+        const res = await window.api.post('/api/auth/google/session', { accessToken: tokens.accessToken });
+        this.saveGoogle({
+          ...res.google,
+          refreshToken: tokens.refreshToken,
+          rollNo: res.profile ? res.profile.rollNo : '',
+          profileName: res.profile ? res.profile.name : ''
+        });
+      } catch (err) {
+        const msg = String((err && err.message) || '');
+        if (!/closed/i.test(msg)) this.showError(errorEl, msg.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') || 'Google sign-in failed.');
+      } finally {
+        this.setBusy(btn, false);
+      }
+    },
+
+    /** Signs in to the exam with the remembered Google account, skipping the one-time code. */
+    async joinWithGoogle(rollNo, name) {
+      try {
+        const res = await window.api.post('/api/auth/google/session', { refreshToken: this.google.refreshToken, rollNo, name });
+        this.saveGoogle({ ...this.google, ...res.google, refreshToken: res.refreshToken || this.google.refreshToken, rollNo: res.profile.rollNo, profileName: res.profile.name });
+        const state = window.AppState;
+        state.studentId = res.session.studentId;
+        state.studentName = res.profile.name;
+        state.token = res.token;
+        window.setExamChrome && window.setExamChrome();
+        this.goToStep('camera');
+        this.startCamera();
+      } catch (err) {
+        if (err.code === 'GOOGLE_SESSION_INVALID') this.saveGoogle(null);
+        throw err;
+      }
     },
 
     // ── Which computer hosts the exam (desktop app only) ──
@@ -127,6 +221,7 @@
       this.renderServer();
       this.exam = null;
       document.getElementById('selected-exam-meta')?.classList.add('hidden');
+      this.refreshGoogleAvailability();
     },
 
     bindOtpInputs() {
@@ -191,14 +286,42 @@
         this.exam = exam;
         const rules = exam.rules || {};
         const parts = [`${exam.questionCount} questions`, `${exam.durationMinutes} minutes`, `${rules.maxStrikes || 3} warnings allowed`];
-        meta.innerHTML = `<strong>${window.escapeHtml(exam.title)}</strong><span>${parts.join(' · ')}</span>`;
+        meta.innerHTML = `<strong>${window.escapeHtml(exam.title)}</strong><span>${parts.join(' · ')}</span><span class="exam-window" id="exam-window"></span>`;
         meta.classList.remove('hidden');
+        this.showExamWindow(exam);
         return exam;
       } catch (err) {
         meta.classList.add('hidden');
         if (!quiet || err.status === 403) this.showError(document.getElementById('auth-error-id'), err.message || 'No exam matches that code.');
         return null;
       }
+    },
+
+    /** Scheduled exams: a live "opens in" countdown, or when the window closes. */
+    showExamWindow(exam) {
+      clearInterval(this.windowTimer);
+      const el = document.getElementById('exam-window');
+      if (!el || (!exam.startsAt && !exam.endsAt)) return;
+      const skew = (exam.serverTime || Date.now()) - Date.now();
+      const fmt = (ms) => new Date(ms).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      const tick = () => {
+        const now = Date.now() + skew;
+        if (exam.startsAt && now < exam.startsAt) {
+          const s = Math.ceil((exam.startsAt - now) / 1000);
+          const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+          const pad = (n) => String(n).padStart(2, '0');
+          el.textContent = `Opens ${fmt(exam.startsAt)} · starts in ${d ? `${d}d ` : ''}${pad(h)}:${pad(m)}:${pad(sec)}`;
+          el.className = 'exam-window upcoming';
+        } else if (exam.endsAt) {
+          el.textContent = `Open now · closes ${fmt(exam.endsAt)}`;
+          el.className = 'exam-window live';
+        } else {
+          el.textContent = 'Open now';
+          el.className = 'exam-window live';
+        }
+      };
+      tick();
+      this.windowTimer = setInterval(tick, 1000);
     },
 
     async join() {
@@ -217,6 +340,10 @@
 
         window.AppState.selectedExamId = exam.id;
         window.AppState.examTitle = exam.title;
+
+        if (this.google && this.google.refreshToken && this.googleAvailable) {
+          return await this.joinWithGoogle(rollNo, name);
+        }
 
         let hasProfile = true;
         try {
@@ -458,6 +585,7 @@
           deviceId: state.deviceId
         });
       } catch (err) {
+        if (err.code === 'EXAM_NOT_STARTED' || err.code === 'EXAM_ENDED') return this.showError(errorEl, err.message);
         this.showError(errorEl, err.code === 'CONCURRENT_SESSION' || err.status === 409
           ? 'This roll number already has an exam in progress on another device. The attempt has been reported to the proctor.'
           : (err.message || 'Could not start the exam. Try again.'));

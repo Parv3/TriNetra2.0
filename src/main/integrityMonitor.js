@@ -58,8 +58,17 @@ class IntegrityMonitor {
 
     win.on('blur', () => this.onWindowBlur());
     win.on('focus', () => this.onWindowFocus());
+    // The exam stays full-screen: anything that takes it out (Esc, F11, Win+Down, a minimise)
+    // is logged and undone straight away.
     win.on('leave-full-screen', () => {
-      if (this.active) this.report('FULLSCREEN_EXITED', { message: 'Exam window left full-screen mode' }, { strike: false });
+      if (!this.active) return;
+      this.report('FULLSCREEN_EXITED', { message: 'Exam window left full-screen mode' }, { strike: false });
+      this.restoreLock();
+    });
+    win.on('minimize', () => {
+      if (!this.active) return;
+      this.report('WINDOW_MINIMIZED', { message: 'Exam window was minimised' }, { strike: false });
+      this.restoreLock();
     });
   }
 
@@ -94,7 +103,7 @@ class IntegrityMonitor {
     const win = this.mainWindow;
     if (win && !win.isDestroyed()) {
       if (typeof win.setContentProtection === 'function') win.setContentProtection(true);
-      if (typeof win.setFullScreen === 'function') win.setFullScreen(true);
+      this.applyLock(win, true);
     }
 
     this.checkDisplays();
@@ -108,14 +117,45 @@ class IntegrityMonitor {
     this.active = false;
     clearInterval(this.scanTimer);
     clearTimeout(this.blurTimer);
+    clearTimeout(this.relockTimer);
     this.scanTimer = null;
     this.unbindDisplayEvents();
 
     const win = this.mainWindow;
     if (win && !win.isDestroyed()) {
       if (typeof win.setContentProtection === 'function') win.setContentProtection(false);
-      if (typeof win.isFullScreen === 'function' && win.isFullScreen()) win.setFullScreen(false);
+      this.applyLock(win, false);
     }
+  }
+
+  /** Kiosk full-screen, above other windows, not minimisable or resizable (Windows hides the taskbar). */
+  applyLock(win, on) {
+    const call = (fn, ...args) => { if (typeof win[fn] === 'function') { try { win[fn](...args); } catch (_) {} } };
+    if (on) {
+      call('setMinimizable', false);
+      call('setResizable', false);
+      call('setAlwaysOnTop', true, 'screen-saver');
+      call('setKiosk', true);
+      call('setFullScreen', true);
+    } else {
+      call('setKiosk', false);
+      if (typeof win.isFullScreen === 'function' && win.isFullScreen()) call('setFullScreen', false);
+      call('setAlwaysOnTop', false);
+      call('setResizable', true);
+      call('setMinimizable', true);
+    }
+  }
+
+  restoreLock() {
+    clearTimeout(this.relockTimer);
+    this.relockTimer = setTimeout(() => {
+      const win = this.mainWindow;
+      if (!this.active || !win || win.isDestroyed()) return;
+      if (typeof win.isMinimized === 'function' && win.isMinimized()) win.restore();
+      this.applyLock(win, true);
+      if (typeof win.focus === 'function') win.focus();
+    }, 250);
+    if (this.relockTimer.unref) this.relockTimer.unref();
   }
 
   // ── Displays ──────────────────────────────────────────────────

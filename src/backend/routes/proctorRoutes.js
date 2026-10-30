@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const proctorService = require('../services/proctorService');
+const { requireProctor } = require('../middleware/authMiddleware');
 
 // Violations that justify interrupting the proctor with a modal (others go to the stream only).
 const URGENT_TYPES = new Set(['PHONE_DETECTED', 'EARPIECE_DETECTED', 'MULTIPLE_FACES', 'IDENTITY_MISMATCH', 'CONCURRENT_LOGIN', 'REMOTE_ACCESS_SOFTWARE', 'SCREEN_CAPTURE_SOFTWARE', 'MULTIPLE_DISPLAYS', 'VIRTUAL_MACHINE']);
@@ -103,7 +104,7 @@ router.post('/input-activity', async (req, res, next) => {
 });
 
 // GET /api/proctor/audit-report/:sessionId
-router.get('/audit-report/:sessionId', async (req, res, next) => {
+router.get('/audit-report/:sessionId', requireProctor, async (req, res, next) => {
   try {
     const report = await proctorService.getAuditReport(req.params.sessionId, req.query);
     if (req.query.format === 'html') {
@@ -126,7 +127,7 @@ router.get('/audit-report/:sessionId', async (req, res, next) => {
 });
 
 // GET /api/proctor/export/:sessionId
-router.get('/export/:sessionId', async (req, res, next) => {
+router.get('/export/:sessionId', requireProctor, async (req, res, next) => {
   try {
     const report = await proctorService.getAuditReport(req.params.sessionId, req.query);
     const format = req.query.format || 'html';

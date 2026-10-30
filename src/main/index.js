@@ -14,6 +14,30 @@ if (app.isPackaged && !process.env.TRINETRA_DATA_DIR) {
   process.env.TRINETRA_DATA_DIR = path.join(app.getPath('userData'), 'data');
 }
 
+/**
+ * Deployment settings from a trinetra.config.json next to the app executable or in its
+ * user-data folder (the first one found wins):
+ *   serverUrl        central exam server for candidate machines (skips the embedded one)
+ *   databaseUrl      cloud PostgreSQL (e.g. Supabase) that mirrors every student's activity
+ *   supabaseUrl,
+ *   supabaseAnonKey  Supabase project used for "Continue with Google"
+ * Environment variables of the same meaning take precedence.
+ */
+function readAppConfig() {
+  const candidates = [path.join(path.dirname(process.execPath), 'trinetra.config.json')];
+  try { candidates.push(path.join(app.getPath('userData'), 'trinetra.config.json')); } catch (_) {}
+  for (const file of candidates) {
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch (_) {}
+  }
+  return {};
+}
+
+const appConfig = readAppConfig();
+const BUNDLED_SUPABASE = { url: 'https://yttybuitwhrscfeabjxz.supabase.co', anonKey: 'sb_publishable_piTcmmumQu7M8T5r5NNSOA_ZgcdT4_y' };
+if (!process.env.DATABASE_URL && appConfig.databaseUrl) process.env.DATABASE_URL = String(appConfig.databaseUrl);
+if (!process.env.SUPABASE_URL) process.env.SUPABASE_URL = String(appConfig.supabaseUrl || BUNDLED_SUPABASE.url);
+if (!process.env.SUPABASE_ANON_KEY) process.env.SUPABASE_ANON_KEY = String(appConfig.supabaseAnonKey || BUNDLED_SUPABASE.anonKey);
+
 const { startServer, stopServer } = require('../backend/server');
 const windowManager = require('./windowManager');
 const { tabManager } = require('./tabManager');
@@ -25,21 +49,12 @@ const packageJson = require('../../package.json');
 
 /**
  * Central-server mode: candidate machines point at one exam server instead of running
- * their own. Configured by TRINETRA_SERVER_URL, or by a trinetra.config.json
- * ({ "serverUrl": "https://exams.example.edu" }) next to the app executable or in its
- * user-data folder. Without it, the app runs its own embedded server (single laptop / LAN host).
+ * their own (TRINETRA_SERVER_URL or "serverUrl" in trinetra.config.json). Without it, the
+ * app runs its own embedded server (single laptop / LAN host).
  */
 function resolveCentralServerUrl() {
-  if (process.env.TRINETRA_SERVER_URL) return process.env.TRINETRA_SERVER_URL.replace(/\/+$/, '');
-  const candidates = [path.join(path.dirname(process.execPath), 'trinetra.config.json')];
-  try { candidates.push(path.join(app.getPath('userData'), 'trinetra.config.json')); } catch (_) {}
-  for (const file of candidates) {
-    try {
-      const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (cfg.serverUrl) return String(cfg.serverUrl).replace(/\/+$/, '');
-    } catch (_) {}
-  }
-  return null;
+  const url = process.env.TRINETRA_SERVER_URL || appConfig.serverUrl;
+  return url ? String(url).replace(/\/+$/, '') : null;
 }
 
 // Check CLI flags

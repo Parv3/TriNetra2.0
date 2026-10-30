@@ -58,6 +58,42 @@ function createApp(options = {}) {
     res.sendFile(path.resolve(__dirname, '../renderer/admin.html'));
   });
 
+  // Download page: lets candidates install the secure browser from the proctor's server (LAN)
+  // or from the published release. The installer is looked up in TRINETRA_INSTALLER, then
+  // ./release (a local build), then an "installer" folder next to the app executable.
+  const findInstaller = () => {
+    const fs = require('fs');
+    const dirs = [path.resolve(process.cwd(), 'release'), path.join(path.dirname(process.execPath), 'installer')];
+    if (process.env.TRINETRA_INSTALLER && fs.existsSync(process.env.TRINETRA_INSTALLER)) return process.env.TRINETRA_INSTALLER;
+    for (const dir of dirs) {
+      try {
+        const exe = fs.readdirSync(dir).filter(f => /setup.*\.exe$/i.test(f)).sort().pop();
+        if (exe) return path.join(dir, exe);
+      } catch (_) {}
+    }
+    return null;
+  };
+  app.get('/download', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../renderer/download.html'));
+  });
+  app.get('/api/system/download', (req, res) => {
+    const file = findInstaller();
+    let sizeMb = null;
+    try { if (file) sizeMb = Math.round(require('fs').statSync(file).size / 1048576); } catch (_) {}
+    res.json({
+      available: Boolean(file),
+      fileName: file ? path.basename(file) : null,
+      sizeMb,
+      version: require('../../package.json').version,
+      releaseUrl: process.env.TRINETRA_RELEASE_URL || 'https://github.com/Parv3/TriNetra2.0/releases/latest'
+    });
+  });
+  app.get('/download/installer.exe', (req, res) => {
+    const file = findInstaller();
+    if (!file) return res.status(404).send('No installer is available on this server.');
+    res.download(file, path.basename(file));
+  });
+
   // Request logger in development
   if (config.ENV === 'development') {
     app.use((req, res, next) => {

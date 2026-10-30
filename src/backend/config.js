@@ -39,5 +39,8 @@ module.exports = {
   SEED_QUESTIONS_FILE: path.resolve(process.cwd(), 'assets', 'seed_questions.json'),
   // Optional PostgreSQL mirror of all student activity, for teachers (docs/TEACHER_SQL.md)
   DATABASE_URL: process.env.DATABASE_URL || '',
+  // Supabase project for "Continue with Google" (set by the desktop app from trinetra.config.json)
+  SUPABASE_URL: (process.env.SUPABASE_URL || '').replace(/\/+$/, ''),
+  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/trinetra'
 };

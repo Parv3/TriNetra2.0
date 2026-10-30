@@ -57,10 +57,20 @@
   // false alarms are controlled by persistence instead: the phone must appear in
   // PHONE_WINDOW_HITS of the last PHONE_WINDOW checks. This model often labels a phone in a
   // hand as "remote", so that class counts too at a higher score.
+  //
+  // The model looks at a 300 px square, where a phone held below the desk edge is only a few
+  // dozen pixels. Each check therefore also runs on one zoomed crop, taking turns between the
+  // lower middle of the frame (hands, lap) and the left and right sides; a phone found in a
+  // crop is mapped back to full-frame coordinates.
   const PHONE_CHECK_MS = 800;
   const PHONE_CLASSES = { 'cell phone': 0.27, remote: 0.45 };
-  const PHONE_WINDOW = 4;
+  const PHONE_WINDOW = 5;
   const PHONE_WINDOW_HITS = 2;
+  const PHONE_CROPS = [
+    [0.15, 0.4, 0.7, 0.6],   // lower middle: hands and lap
+    [0, 0.15, 0.55, 0.85],   // left side
+    [0.45, 0.15, 0.55, 0.85] // right side
+  ];
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -182,9 +192,27 @@
       try {
         const model = await this.loadObjectDetector();
         if (!model || !this.running) return;
-        const found = (await model.detect(v, 10, 0.2))
-          .filter(d => PHONE_CLASSES[d.class] !== undefined && d.score >= PHONE_CLASSES[d.class])
-          .sort((a, b) => b.score - a.score)[0];
+        const isPhone = (d) => PHONE_CLASSES[d.class] !== undefined && d.score >= PHONE_CLASSES[d.class];
+        const candidates = (await model.detect(v, 10, 0.2)).filter(isPhone);
+
+        // One zoomed crop per check, taking turns
+        const vw = v.videoWidth || 640;
+        const vh = v.videoHeight || 480;
+        this.phoneCropIdx = ((this.phoneCropIdx || 0) + 1) % PHONE_CROPS.length;
+        const [cx, cy, cw, ch] = PHONE_CROPS[this.phoneCropIdx];
+        const sx = cx * vw, sy = cy * vh, sw = cw * vw, sh = ch * vh;
+        const canvas = this.phoneCanvas || (this.phoneCanvas = document.createElement('canvas'));
+        const scale = Math.min(2, 480 / Math.max(sw, sh));
+        canvas.width = Math.round(sw * scale);
+        canvas.height = Math.round(sh * scale);
+        canvas.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        if (this.running) {
+          (await model.detect(canvas, 10, 0.2)).filter(isPhone).forEach(d => {
+            const [x, y, w, h] = d.bbox;
+            candidates.push({ ...d, bbox: [sx + x / scale, sy + y / scale, w / scale, h / scale], crop: this.phoneCropIdx });
+          });
+        }
+        const found = candidates.sort((a, b) => b.score - a.score)[0];
         this.phoneHistory = [...(this.phoneHistory || []), Boolean(found)].slice(-PHONE_WINDOW);
         if (found) this.lastPhone = { box: found.bbox, score: found.score, at: Date.now() };
 
@@ -194,7 +222,7 @@
           this.reportViolation({
             type: 'PHONE_DETECTED',
             snapshot: this.snapshot(320, 240, 0.75, this.lastPhone),
-            details: { label: found.class, score: Math.round(found.score * 100) / 100, box: found.bbox.map(Math.round) }
+            details: { label: found.class, score: Math.round(found.score * 100) / 100, box: found.bbox.map(Math.round), zoomed: found.crop !== undefined }
           });
         }
       } catch (_) {
