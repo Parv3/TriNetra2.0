@@ -262,6 +262,11 @@
         hint.textContent = 'Enter an address like 192.168.1.20';
         return;
       }
+      // 127.0.0.1 / localhost is always this laptop, never the proctor's
+      if (/^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:|$)/i.test(url)) {
+        hint.textContent = "That address means this laptop. Enter the proctor's address shown at the top of their console, e.g. 172.16.185.235.";
+        return;
+      }
       hint.textContent = `Connecting to ${url}…`;
       try {
         const ctrl = new AbortController();
