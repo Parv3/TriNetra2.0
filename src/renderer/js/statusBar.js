@@ -68,7 +68,7 @@
     const state = window.AppState || {};
     const inExam = Boolean(state.sessionId) && !state.submitted && !state.disqualified;
     ['status-camera', 'status-time', 'status-warnings'].forEach(id => $(id)?.classList.toggle('hidden', !inExam));
-    const voiceOn = inExam && (state.rules || {}).enableVoiceMonitoring !== false && window.VoiceMonitor;
+    const voiceOn = inExam && (state.rules || {}).enableVoiceMonitoring !== false && window.VoiceMonitor && window.VoiceMonitor.enabled;
     $('status-mic')?.classList.toggle('hidden', !voiceOn);
     if (voiceOn) {
       const mic = window.VoiceMonitor.state();

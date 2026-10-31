@@ -12,6 +12,11 @@
   const TICK_MS = 50;
 
   const VoiceMonitor = {
+    // Master switch. Off for now: too many false alarms in noisy rooms (e.g. a hackathon
+    // hall). When false the microphone is never opened, the voice sample step and the
+    // console's "Listen for other voices" setting are hidden. Set to true to bring it back.
+    enabled: false,
+
     stream: null,
     audioCtx: null,
     analyser: null,

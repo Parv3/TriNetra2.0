@@ -85,6 +85,10 @@ function createApp(options = {}) {
     }
     return null;
   };
+  // Public install landing page (a separate, self-contained page)
+  app.get(['/install', '/get'], (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../renderer/install.html'));
+  });
   app.get('/download', (req, res) => {
     res.sendFile(path.resolve(__dirname, '../renderer/download.html'));
   });

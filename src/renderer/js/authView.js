@@ -614,7 +614,7 @@
 
     voiceRequired() {
       const rules = (this.exam && this.exam.rules) || {};
-      return rules.enableVoiceMonitoring !== false && Boolean(window.VoiceMonitor);
+      return rules.enableVoiceMonitoring !== false && Boolean(window.VoiceMonitor && window.VoiceMonitor.enabled);
     },
 
     /** The 5-second voice sample: pitch, room noise and how much the lips move when talking. */
@@ -742,7 +742,7 @@
         stream.getTracks().forEach(t => t.stop());
         window.ProctorClient?.stopCalibration();
       }
-      if (rules.enableVoiceMonitoring !== false && window.VoiceMonitor) {
+      if (rules.enableVoiceMonitoring !== false && window.VoiceMonitor && window.VoiceMonitor.enabled) {
         window.VoiceMonitor.start({ strictness: rules.strictness || 'standard' });
       }
       window.startTimer();
