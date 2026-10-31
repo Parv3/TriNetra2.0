@@ -98,19 +98,44 @@ function createApp(options = {}) {
   // a shared campus Wi-Fi uses up quickly. Cached for 10 minutes; a stale answer beats none.
   const RELEASE_REPO = process.env.TRINETRA_RELEASE_REPO || 'Parv3/TriNetra2.0';
   const RELEASES_PAGE = process.env.TRINETRA_RELEASE_URL || `https://github.com/${RELEASE_REPO}/releases/latest`;
-  let releaseCache = { at: 0, asset: null };
+  let releaseCache = { at: 0, asset: null, triedAt: 0 };
   const latestReleaseAsset = async () => {
-    if (releaseCache.asset && Date.now() - releaseCache.at < 10 * 60 * 1000) return releaseCache.asset;
+    const now = Date.now();
+    if (releaseCache.asset && now - releaseCache.at < 10 * 60 * 1000) return releaseCache.asset;
+    if (now - releaseCache.triedAt < 60 * 1000) return releaseCache.asset; // don't retry more than once a minute
+    releaseCache.triedAt = now;
+    const fetchFn = options.fetchFn || fetch;
+    const headers = { 'User-Agent': 'trinetra-exam-server' };
+    const remember = (asset) => { releaseCache = { at: Date.now(), asset, triedAt: releaseCache.triedAt }; return asset; };
+
+    // 1. GitHub's API: finds the .exe whatever it's called
     try {
-      const fetchFn = options.fetchFn || fetch;
       const r = await fetchFn(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, {
-        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'trinetra-exam-server' },
+        headers: { ...headers, Accept: 'application/vnd.github+json' },
         signal: AbortSignal.timeout(5000)
       });
       if (r.ok) {
         const rel = await r.json();
         const exe = (rel.assets || []).find(a => /\.exe$/i.test(a.name));
-        if (exe) releaseCache = { at: Date.now(), asset: { url: exe.browser_download_url, name: exe.name, sizeMb: Math.round(exe.size / 1048576), version: rel.tag_name } };
+        if (exe) return remember({ url: exe.browser_download_url, name: exe.name, sizeMb: Math.round(exe.size / 1048576), version: rel.tag_name });
+      } else {
+        console.warn(`[Download] GitHub API answered ${r.status}; trying the direct release link`);
+      }
+    } catch (err) {
+      console.warn('[Download] GitHub API unreachable:', err.message);
+    }
+
+    // 2. The API is rate-limited per address, and cloud hosts share addresses. GitHub's
+    // permanent link to a file in the latest release needs no API; the file name is the one
+    // electron-builder gives this version (spaces become dots on upload).
+    try {
+      const version = require('../../package.json').version;
+      const name = `Trinetra.Secure.Browser.Setup.${version}.exe`;
+      const url = `https://github.com/${RELEASE_REPO}/releases/latest/download/${name}`;
+      const h = await fetchFn(url, { method: 'HEAD', redirect: 'follow', headers, signal: AbortSignal.timeout(8000) });
+      if (h.ok) {
+        const bytes = Number(h.headers && h.headers.get ? h.headers.get('content-length') : 0);
+        return remember({ url, name, sizeMb: bytes ? Math.round(bytes / 1048576) : null, version: `v${version}` });
       }
     } catch (_) {}
     return releaseCache.asset;

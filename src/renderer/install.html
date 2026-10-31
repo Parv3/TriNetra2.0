@@ -506,7 +506,7 @@
           if (info && info.available) {
             setMeta('<strong>v' + info.version + '</strong>' + (info.sizeMb ? ' · ' + info.sizeMb + ' MB' : '') + ' · Windows 10 and 11 · 64-bit');
           } else if (info && info.release) {
-            setMeta('<strong>' + info.release.version + '</strong> · ' + info.release.sizeMb + ' MB · Windows 10 and 11 · 64-bit');
+            setMeta('<strong>' + info.release.version + '</strong>' + (info.release.sizeMb ? ' · ' + info.release.sizeMb + ' MB' : '') + ' · Windows 10 and 11 · 64-bit');
           } else if (info) {
             showNote('The installer is being published. If the download doesn\'t start, ask your proctor for the installer.', true);
           }
