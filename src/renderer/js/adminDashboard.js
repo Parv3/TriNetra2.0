@@ -1437,6 +1437,7 @@
           enableAiGuard: document.getElementById('toggle-new-rule-aiguard').checked,
           enableClipboardProtection: document.getElementById('toggle-new-rule-clipboard').checked,
           enableGuidedAssistant: document.getElementById('toggle-new-rule-assist').checked,
+          enableVoiceMonitoring: document.getElementById('toggle-new-rule-voice').checked,
           strictness: document.getElementById('select-new-rule-strictness').value,
           maxStrikes: parseInt(document.getElementById('select-new-rule-strikes').value, 10) || 3
         }
@@ -1554,6 +1555,7 @@
         document.getElementById('toggle-rule-aiguard').checked = rules.enableAiGuard !== false;
         document.getElementById('toggle-rule-clipboard').checked = rules.enableClipboardProtection !== false;
         document.getElementById('toggle-rule-assist').checked = rules.enableGuidedAssistant !== false;
+        document.getElementById('toggle-rule-voice').checked = rules.enableVoiceMonitoring !== false;
         document.getElementById('select-rule-strictness').value = rules.strictness || 'standard';
         document.getElementById('select-rule-strikes').value = String(rules.maxStrikes || 3);
       } catch (err) {
@@ -1575,6 +1577,7 @@
         enableAiGuard: document.getElementById('toggle-rule-aiguard')?.checked ?? true,
         enableClipboardProtection: document.getElementById('toggle-rule-clipboard')?.checked ?? true,
         enableGuidedAssistant: document.getElementById('toggle-rule-assist')?.checked ?? true,
+        enableVoiceMonitoring: document.getElementById('toggle-rule-voice')?.checked ?? true,
         strictness: document.getElementById('select-rule-strictness')?.value || 'standard',
         maxStrikes: parseInt(document.getElementById('select-rule-strikes')?.value, 10) || 3
       };

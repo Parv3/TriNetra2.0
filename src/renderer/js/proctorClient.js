@@ -49,7 +49,9 @@
     GAZE_DIVERSION: 'You were looking away from the screen',
     LOOKING_DOWN: 'You were looking down, away from the screen',
     IDENTITY_MISMATCH: 'The person in front of the camera does not match the reference photo',
-    PHONE_DETECTED: 'A phone is visible to the camera'
+    PHONE_DETECTED: 'A phone is visible to the camera',
+    OTHER_VOICE: 'Someone else was heard speaking',
+    MULTIPLE_VOICES: 'More than one voice was heard'
   };
 
   // Phone detection (COCO-SSD). Measured on webcam-sized frames, a phone held up to the camera
@@ -314,6 +316,7 @@
       const leftEye = lm.getLeftEye();
       const rightEye = lm.getRightEye();
       const jaw = lm.getJawOutline();
+      this.trackMouth(lm.getMouth());
 
       const lp = this.estimatePupil(ctx, leftEye);
       const rp = this.estimatePupil(ctx, rightEye);
@@ -380,6 +383,30 @@
       };
     },
 
+    // ── Lips (for the voice monitor: speech heard while the lips are still) ──
+
+    /** Records how open the mouth is: inner-lip gap over mouth width, from the 68-point landmarks. */
+    trackMouth(mouth) {
+      if (!mouth || mouth.length < 20) return;
+      const gap = (Math.abs(mouth[19].y - mouth[13].y) + Math.abs(mouth[18].y - mouth[14].y) + Math.abs(mouth[17].y - mouth[15].y)) / 3;
+      const width = Math.abs(mouth[6].x - mouth[0].x) || 1;
+      const now = Date.now();
+      this.mouthTrack = (this.mouthTrack || []).filter(m => now - m.t < 2000);
+      this.mouthTrack.push({ t: now, open: gap / width });
+    },
+
+    /**
+     * How much the lips moved in the last 0.8 s: { faceCount, range } (range null when the
+     * camera can't tell: no single face, or no recent frames).
+     */
+    lipState(now = Date.now()) {
+      const faceCount = this.lastMetrics ? this.lastMetrics.faceCount : (this.calibrationMetrics ? this.calibrationMetrics.faceCount : null);
+      const recent = (this.mouthTrack || []).filter(m => now - m.t <= 800);
+      if (faceCount !== 1 || recent.length < 3) return { faceCount, range: null };
+      const values = recent.map(m => m.open);
+      return { faceCount, range: Math.max(...values) - Math.min(...values) };
+    },
+
     // ── Overlay ──────────────────────────────────────────────────
 
     drawOverlay(canvas, ctx, detections, metrics, w, h) {
@@ -442,6 +469,7 @@
           const detections = await this.detect(v);
           // Judge against a neutral default pose while the candidate's own reference is being collected.
           const m = this.computeMetrics(detections, aCtx, DEFAULT_BASELINE);
+          this.calibrationMetrics = m;
           this.drawOverlay(this.calibCanvas, this.calibCtx, detections, m, w, h);
           if (m.faceCount === 1 && !m.blinking) {
             this.calibrationSamples.push({ yaw: m.yaw, pitchRatio: m.pitchRatio, hgr: m.hgr, vgr: m.vgr });

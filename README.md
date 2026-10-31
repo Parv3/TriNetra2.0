@@ -30,6 +30,7 @@ Students take the exam in a Windows desktop app. The proctor's laptop runs the s
 | Area | Signals |
 |---|---|
 | Camera | No face, more than one face, looking away, looking down, a different person, a phone in view |
+| Microphone | Someone else speaking (a voice while the student's lips are still), two different voices, a voice that doesn't match the student's sample |
 | Browser | AI sites, pasting the question into a search, searches unrelated to the question, every address visited |
 | Device | Leaving full screen, minimising, focus moving to another app, a second display, screen-sharing or remote-desktop programs, DevTools, a new camera or Bluetooth earpiece appearing |
 | Input | Copy and paste, blocked shortcuts, typing rate |
@@ -87,6 +88,7 @@ Students take the exam in a Windows desktop app. The proctor's laptop runs the s
 | **face-api.js** (`@vladmandic/face-api` 1.7) | TinyFaceDetector for face count, 68-point landmarks for head pose and gaze, FaceRecognitionNet for identity |
 | **COCO-SSD** (SSDLite MobileNet v2) | Phone detection ("cell phone" and "remote" classes) |
 | Custom heuristics | Head yaw and pitch, eye position, smoothing and timing rules so glances don't count (see below) |
+| Web Audio API + custom DSP | Voice detection: pitch by normalised autocorrelation, adaptive noise floor, lip-movement check from face landmarks (`voiceAnalysis.js`) |
 
 ### AI assistant
 | Technology | Used for |
@@ -145,6 +147,14 @@ Students take the exam in a Windows desktop app. The proctor's laptop runs the s
 3. **Identity:** every 5 seconds the face is compared with the baseline from the camera check. Two mismatches in a row are reported.
 4. **Phone:** COCO-SSD checks the full frame and one zoomed crop each time, rotating between the hands and lap, the left side and the right side, because a phone in a hand is tiny at the model's 300 px input. It must be seen in 2 of the last 5 checks.
 5. Each warning saves a snapshot with the detected face or phone outlined.
+
+**Voice pipeline (in `src/renderer/js/voiceAnalysis.js` and `voiceMonitor.js`)**
+1. At the camera check the student reads one sentence aloud for 5 seconds. That records their voice pitch, the room's noise level, and how much their lips move when they talk.
+2. During the exam the microphone is analysed on the laptop 20 times a second: is there speech, and at what pitch. Nothing is recorded or uploaded.
+3. **Someone else speaking:** speech is heard while the camera sees the student's lips not moving. This works even when the other person's voice sounds like the student's.
+4. **Two voices:** the speech splits into two clearly different pitch groups (at least half an octave apart), or doesn't match the student's sample when the camera can't see their lips.
+5. Like the camera, a condition must last long enough (1.2–3 s depending on strictness), and each warning carries the camera frame from that moment.
+6. Tested on real recorded speech from a male and a female voice (`test/voice_analysis.test.js`), including two people talking at once.
 
 **Warnings and the timer**
 - Each confirmed violation is one warning. On the last one (3 by default), answers are submitted automatically and the attempt is marked for review. The proctor can resume it.

@@ -420,7 +420,7 @@ class ProctorService {
     });
 
     // 2. Answers recorded while the camera had just flagged something
-    const cameraFlags = violations.filter(v => ['NO_FACE', 'MULTIPLE_FACES', 'IDENTITY_MISMATCH', 'PHONE_DETECTED', 'EARPIECE_DETECTED'].includes(v.type));
+    const cameraFlags = violations.filter(v => ['NO_FACE', 'MULTIPLE_FACES', 'IDENTITY_MISMATCH', 'PHONE_DETECTED', 'EARPIECE_DETECTED', 'OTHER_VOICE', 'MULTIPLE_VOICES'].includes(v.type));
     answerLog.forEach(entry => {
       const flag = cameraFlags.find(v => entry.at >= v.timestamp && entry.at - v.timestamp <= 15000);
       if (flag) {

@@ -202,6 +202,7 @@ const RULE_DEFAULTS = {
   enableAiGuard: true,
   enableClipboardProtection: true,
   enableGuidedAssistant: true,
+  enableVoiceMonitoring: true,
   maxStrikes: 3,
   strictness: 'standard'
 };

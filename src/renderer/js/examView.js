@@ -308,6 +308,7 @@
       window.switchView('results');
       window.proctorAPI?.setExamContext?.(null).catch?.(() => {});
       window.ProctorClient && window.ProctorClient.stop();
+      window.VoiceMonitor && window.VoiceMonitor.stop();
       window.InputTracker && window.InputTracker.stop();
       window.endLockdown && window.endLockdown();
     }

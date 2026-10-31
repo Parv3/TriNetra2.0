@@ -581,3 +581,14 @@ body.locked #btn-minimize, body.locked #btn-maximize { display: none; }
 #google-signed-out .field-hint { margin: 8px 0 0; }
 #google-signed-out .btn-google { margin-top: 10px; }
 #google-signed-out .btn-google.hidden { display: none; }
+
+/* Voice sample at the camera check */
+.voice-check { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line, #e2e8f0); border-radius: var(--radius-s, 10px); background: #fff; }
+.voice-check-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 240px; }
+.voice-check-text span { font-size: 13px; color: var(--muted); }
+.voice-check-text q { font-size: 15px; font-weight: 600; color: var(--ink, #252726); }
+.voice-check-controls { display: flex; align-items: center; gap: 12px; }
+.voice-meter { width: 120px; height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+.voice-meter span { display: block; height: 100%; width: 0; background: var(--brand, #006FDB); transition: width 60ms linear; }
+#voice-status { flex-basis: 100%; margin: 0; }
+#voice-status.bad { color: #c62828; }

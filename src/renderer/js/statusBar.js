@@ -68,6 +68,15 @@
     const state = window.AppState || {};
     const inExam = Boolean(state.sessionId) && !state.submitted && !state.disqualified;
     ['status-camera', 'status-time', 'status-warnings'].forEach(id => $(id)?.classList.toggle('hidden', !inExam));
+    const voiceOn = inExam && (state.rules || {}).enableVoiceMonitoring !== false && window.VoiceMonitor;
+    $('status-mic')?.classList.toggle('hidden', !voiceOn);
+    if (voiceOn) {
+      const mic = window.VoiceMonitor.state();
+      set('status-mic', mic === 'off' ? 'Mic off' : mic === 'speech' ? 'Voice heard' : 'Mic on',
+        mic === 'off' ? 'bad' : mic === 'speech' ? 'warn' : 'ok',
+        mic === 'off' ? 'The microphone is not working — check that it is connected and allowed'
+          : 'The microphone listens for other voices. Sound stays on this laptop.');
+    }
     if (!inExam) return;
 
     const stream = window.ProctorClient && window.ProctorClient.stream;

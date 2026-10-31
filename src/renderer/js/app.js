@@ -157,6 +157,7 @@
     state.disqualified = true;
     clearInterval(state.timerInterval);
     window.ProctorClient && window.ProctorClient.stop();
+    window.VoiceMonitor && window.VoiceMonitor.stop();
     window.InputTracker && window.InputTracker.stop();
     window.LiveStream && window.LiveStream.stopAll();
     endLockdown();
@@ -180,6 +181,7 @@
     window.InputTracker && window.InputTracker.init();
     beginLockdown(state.sessionId);
     if ((state.rules || {}).enableVisionProctoring !== false && window.ProctorClient) window.ProctorClient.init(null);
+    if ((state.rules || {}).enableVoiceMonitoring !== false && window.VoiceMonitor) window.VoiceMonitor.start({ strictness: (state.rules || {}).strictness || 'standard' });
     startTimer();
     showWarning(msg.message || 'Your proctor has resumed your exam.', state.strikes, state.maxStrikes, { informational: true });
   }

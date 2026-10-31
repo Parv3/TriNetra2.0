@@ -58,6 +58,7 @@
       this.bindOtpInputs();
 
       $('btn-capture-face')?.addEventListener('click', () => this.captureFace());
+      $('btn-record-voice')?.addEventListener('click', () => this.recordVoice());
     },
 
     // ── Google account (Supabase Auth), remembered across launches ──
@@ -522,6 +523,10 @@
     },
 
     async startCamera() {
+      // The voice sample only appears when this exam listens for voices
+      const voice = this.voiceRequired();
+      document.getElementById('voice-check')?.classList.toggle('hidden', !voice);
+      document.querySelector('#camera-checklist [data-check="voice"]')?.classList.toggle('hidden', !voice);
       try {
         try {
           cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
@@ -607,6 +612,38 @@
       else this.setStatus('Ready. Hold still and take the photo.', 'live');
     },
 
+    voiceRequired() {
+      const rules = (this.exam && this.exam.rules) || {};
+      return rules.enableVoiceMonitoring !== false && Boolean(window.VoiceMonitor);
+    },
+
+    /** The 5-second voice sample: pitch, room noise and how much the lips move when talking. */
+    async recordVoice() {
+      const btn = document.getElementById('btn-record-voice');
+      const status = document.getElementById('voice-status');
+      const fill = document.getElementById('voice-meter-fill');
+      if (btn.disabled || !window.VoiceMonitor) return;
+      this.setBusy(btn, true, 'Listening…');
+      status.textContent = 'Read the sentence aloud now.';
+      status.classList.remove('bad');
+      try {
+        const result = await window.VoiceMonitor.enroll(5, (level, progress) => {
+          if (fill) fill.style.width = `${Math.round(level * 100)}%`;
+          btn.textContent = `Listening… ${Math.max(0, Math.ceil(5 - progress * 5))}s`;
+        });
+        this.voiceRecorded = result.ok;
+        this.setCheck('voice', result.ok);
+        status.textContent = result.ok
+          ? `Voice sample saved.${result.talkingLipRange ? '' : ' Keep your face in view so we can also see when you speak.'}`
+          : result.reason;
+        status.classList.toggle('bad', !result.ok);
+      } finally {
+        if (fill) fill.style.width = '0%';
+        this.setBusy(btn, false);
+        btn.textContent = this.voiceRecorded ? 'Record again' : 'Record voice sample';
+      }
+    },
+
     async captureFace() {
       const errorEl = document.getElementById('auth-error-camera');
       const btn = document.getElementById('btn-capture-face');
@@ -618,6 +655,10 @@
         const earpieces = await this.refreshEarpieceCheck();
         if (earpieces.length) {
           this.showError(errorEl, `Disconnect your earphones or headset before starting: ${earpieces.join(', ')}.`);
+          return;
+        }
+        if (this.voiceRequired() && !this.voiceRecorded) {
+          this.showError(errorEl, 'Record your voice sample first (above).');
           return;
         }
         const reference = window.ProctorClient ? await window.ProctorClient.captureReference(video) : { ok: true };
@@ -700,6 +741,9 @@
       } else if (stream) {
         stream.getTracks().forEach(t => t.stop());
         window.ProctorClient?.stopCalibration();
+      }
+      if (rules.enableVoiceMonitoring !== false && window.VoiceMonitor) {
+        window.VoiceMonitor.start({ strictness: rules.strictness || 'standard' });
       }
       window.startTimer();
     },

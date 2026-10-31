@@ -4,7 +4,7 @@ const proctorService = require('../services/proctorService');
 const { requireProctor } = require('../middleware/authMiddleware');
 
 // Violations that justify interrupting the proctor with a modal (others go to the stream only).
-const URGENT_TYPES = new Set(['PHONE_DETECTED', 'EARPIECE_DETECTED', 'MULTIPLE_FACES', 'IDENTITY_MISMATCH', 'CONCURRENT_LOGIN', 'REMOTE_ACCESS_SOFTWARE', 'SCREEN_CAPTURE_SOFTWARE', 'MULTIPLE_DISPLAYS', 'VIRTUAL_MACHINE']);
+const URGENT_TYPES = new Set(['PHONE_DETECTED', 'OTHER_VOICE', 'MULTIPLE_VOICES', 'EARPIECE_DETECTED', 'MULTIPLE_FACES', 'IDENTITY_MISMATCH', 'CONCURRENT_LOGIN', 'REMOTE_ACCESS_SOFTWARE', 'SCREEN_CAPTURE_SOFTWARE', 'MULTIPLE_DISPLAYS', 'VIRTUAL_MACHINE']);
 
 function notifyProctors(body, result) {
   try {
