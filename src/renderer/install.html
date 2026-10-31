@@ -457,8 +457,6 @@
 
   <script>
     (function () {
-      var REPO = 'Parv3/TriNetra2.0';
-      var RELEASES = 'https://github.com/' + REPO + '/releases';
       var buttons = document.querySelectorAll('[data-download]');
       var metas = document.querySelectorAll('[data-dl-meta]');
       var note = document.querySelector('[data-dl-note]');
@@ -479,12 +477,8 @@
       setInterval(tick, 15000);
 
       var setMeta = function (text) { metas.forEach(function (m) { m.innerHTML = text; }); };
-      var point = function (url, external) {
-        buttons.forEach(function (b) {
-          b.href = url;
-          if (external) b.setAttribute('rel', 'noopener');
-          b.removeAttribute('aria-disabled');
-        });
+      var point = function (url) {
+        buttons.forEach(function (b) { b.href = url; });
       };
       var showNote = function (text, warn) {
         note.textContent = text;
@@ -501,34 +495,23 @@
           : 'Trinetra installs on Windows. On this computer, you can take the exam in your browser instead.');
       }
 
-      buttons.forEach(function (b) { b.setAttribute('aria-disabled', 'true'); });
+      // Every button downloads straight away from this server's fixed link, which serves the
+      // installer kept here or redirects to the file in the latest GitHub Release.
+      point('/download/latest');
 
-      // 1. The latest GitHub Release, 2. an installer kept on this exam server, 3. the releases page
-      fetch('https://api.github.com/repos/' + REPO + '/releases/latest')
+      // Version and size for the caption
+      fetch('/api/system/download')
         .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (rel) {
-          var asset = rel && (rel.assets || []).filter(function (a) { return /\.exe$/i.test(a.name); })[0];
-          if (asset) {
-            point(asset.browser_download_url, true);
-            setMeta('<strong>' + (rel.tag_name || 'Latest') + '</strong> · ' + Math.round(asset.size / 1048576) + ' MB · Windows 10 and 11 · 64-bit');
-            return true;
+        .then(function (info) {
+          if (info && info.available) {
+            setMeta('<strong>v' + info.version + '</strong>' + (info.sizeMb ? ' · ' + info.sizeMb + ' MB' : '') + ' · Windows 10 and 11 · 64-bit');
+          } else if (info && info.release) {
+            setMeta('<strong>' + info.release.version + '</strong> · ' + info.release.sizeMb + ' MB · Windows 10 and 11 · 64-bit');
+          } else if (info) {
+            showNote('The installer is being published. If the download doesn\'t start, ask your proctor for the installer.', true);
           }
-          return fetch('/api/system/download').then(function (r) { return r.ok ? r.json() : null; }).then(function (info) {
-            if (info && info.available) {
-              point('/download/installer.exe');
-              setMeta('<strong>v' + info.version + '</strong>' + (info.sizeMb ? ' · ' + info.sizeMb + ' MB' : '') + ' · Windows 10 and 11 · 64-bit');
-              return true;
-            }
-            return false;
-          });
         })
-        .catch(function () { return false; })
-        .then(function (found) {
-          if (found) return;
-          point(RELEASES, true);
-          setMeta('Windows 10 and 11 · 64-bit');
-          showNote('The installer is being published. If the download page is empty, ask your proctor for the installer.', true);
-        });
+        .catch(function () {});
     })();
   </script>
 </body>

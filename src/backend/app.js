@@ -74,6 +74,7 @@ function createApp(options = {}) {
   // or from the published release. The installer is looked up in TRINETRA_INSTALLER, then
   // ./release (a local build), then an "installer" folder next to the app executable.
   const findInstaller = () => {
+    if (options.findLocalInstaller === false) return null;
     const fs = require('fs');
     const dirs = [path.resolve(process.cwd(), 'release'), path.join(path.dirname(process.execPath), 'installer')];
     if (process.env.TRINETRA_INSTALLER && fs.existsSync(process.env.TRINETRA_INSTALLER)) return process.env.TRINETRA_INSTALLER;
@@ -92,17 +93,51 @@ function createApp(options = {}) {
   app.get('/download', (req, res) => {
     res.sendFile(path.resolve(__dirname, '../renderer/download.html'));
   });
-  app.get('/api/system/download', (req, res) => {
+  // The newest installer published as a GitHub Release. Looked up here rather than in each
+  // visitor's browser: GitHub allows 60 unauthenticated API calls an hour per network, which
+  // a shared campus Wi-Fi uses up quickly. Cached for 10 minutes; a stale answer beats none.
+  const RELEASE_REPO = process.env.TRINETRA_RELEASE_REPO || 'Parv3/TriNetra2.0';
+  const RELEASES_PAGE = process.env.TRINETRA_RELEASE_URL || `https://github.com/${RELEASE_REPO}/releases/latest`;
+  let releaseCache = { at: 0, asset: null };
+  const latestReleaseAsset = async () => {
+    if (releaseCache.asset && Date.now() - releaseCache.at < 10 * 60 * 1000) return releaseCache.asset;
+    try {
+      const fetchFn = options.fetchFn || fetch;
+      const r = await fetchFn(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, {
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'trinetra-exam-server' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (r.ok) {
+        const rel = await r.json();
+        const exe = (rel.assets || []).find(a => /\.exe$/i.test(a.name));
+        if (exe) releaseCache = { at: Date.now(), asset: { url: exe.browser_download_url, name: exe.name, sizeMb: Math.round(exe.size / 1048576), version: rel.tag_name } };
+      }
+    } catch (_) {}
+    return releaseCache.asset;
+  };
+
+  app.get('/api/system/download', async (req, res) => {
     const file = findInstaller();
     let sizeMb = null;
     try { if (file) sizeMb = Math.round(require('fs').statSync(file).size / 1048576); } catch (_) {}
+    const release = file ? null : await latestReleaseAsset();
     res.json({
       available: Boolean(file),
       fileName: file ? path.basename(file) : null,
       sizeMb,
       version: require('../../package.json').version,
-      releaseUrl: process.env.TRINETRA_RELEASE_URL || 'https://github.com/Parv3/TriNetra2.0/releases/latest'
+      release,
+      releaseUrl: RELEASES_PAGE
     });
+  });
+
+  // One fixed link for every download button: the installer on this server if there is one,
+  // otherwise straight to the file in the latest GitHub Release.
+  app.get('/download/latest', async (req, res) => {
+    const file = findInstaller();
+    if (file) return res.download(file, path.basename(file));
+    const asset = await latestReleaseAsset();
+    return res.redirect(302, asset ? asset.url : RELEASES_PAGE);
   });
   app.get('/download/installer.exe', (req, res) => {
     const file = findInstaller();
